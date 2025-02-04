@@ -1,27 +1,78 @@
 function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort removal and direction reassignment due to conflicts
     sorted_keys = sort(collect(keys(items)), by = x -> sum(length(items[x].escortx) + length(items[x].escorty)), rev = false)
     # sort the items by the increasing number of total escorts
+    blockmat = [0 for _ in 1:size(matrix, 1), _ in 1:size(matrix, 2)]
     for key in sorted_keys
         item = items[key]
-        if length(item.escortx) == 0 && length(item.escorty) == 0
+        x,y = item.coords
+        if length(item.escortsx) == 0 && length(item.escortsy) == 0
             item.direction = 0 # not move
             continue
         end
-        if length(item.escortx) == 0
+        if length(item.escortsx) == 0 && length(item.escortsy) > 0
             item.direction = 2 # move in y
-            #check for the y escorts and remove the assigned escort from others (also the ones on its path serving perpendicularly others) 
+            escortid = find_nearest_escort(item, blockmat,2,escorts)
+            if escortid == 0
+                println("No escort found for item ", key)
+                continue
+            end
+            updateblockmat!( blockmat, item, escorts[escortid])
+            sorted_keys = filter(x -> x != key, sorted_keys)
+            updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
         end
-        if length(item.escorty) == 0
+        if length(item.escortsy) == 0 && length(item.escortsx) > 0
             item.direction = 1
-            #check for the x escorts and remove  the assigned escort from others (also the ones on its path serving perpendicularly others) 
+            escortid = find_nearest_escort(item, blockmat,1,escorts)
+            if escortid == 0
+                println("No escort found for item ", key)
+                continue
+            end
+            updateblockmat!( blockmat, item, escorts[escortid])
+            sorted_keys = filter(x -> x != key, sorted_keys)
+            updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
         end
-        if length(item.escortx) > length(item.escorty)
+        if length(item.escortsx) > length(item.escortsy)
             item.direction = 1
-        else
-            item.direction = 2
+            escortid = find_nearest_escort(item, blockmat,1,escorts)
+            if escortid == 0
+                escortid = find_nearest_escort(item, blockmat,2,escorts)
+                if escortid == 0
+                    println("No escort found both directions for item ", key)
+                    continue
+                end
+                item.direction = 2
+            end
+            updateblockmat!( blockmat, item, escorts[escortid])
+            sorted_keys = filter(x -> x != key, sorted_keys)
+            updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
+        elseif length(item.escortsx) <= length(item.escortsy)
+            item.direction = 2 # move in y
+            escortid = find_nearest_escort(item, blockmat,2,escorts)
+            if escortid == 0
+                escortid = find_nearest_escort(item, blockmat,1,escorts)
+                if escortid == 0
+                    println("No escort found both directions for item ", key)
+                    continue
+                end
+                item.direction = 1
+            end
+            updateblockmat!( blockmat, item, escorts[escortid])
+            sorted_keys = filter(x -> x != key, sorted_keys)
+            updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
+        end
+        #Final assignment if escortid is not 0
+        if item.direction == 2
+            item.escortsy = [escortid] 
+            item.escort_x = Vector{Char}()
+            escorts[escortid].itemsy = [key]
+        elseif item.direction == 1
+            item.escort_x = [escortid]
+            item.escortsy = Vector{Char}()
+            escorts[escortid].itemsx = [key]
         end
 
-
+        # Remove the key from sorted_keys for the next iteration and re sort according to number of escorts
+        
         sorted_keys = sort(collect(keys(items)), by = x -> sum(length(items[x].sescortx) + length(items[x].escorty)), rev = false)
         if all([length(items[key].escortx) == 0 && length(items[key].escorty) == 0 for key in sorted_keys])
             break
@@ -29,7 +80,138 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
     end
 
 end
-function save_item_escorts!(matrix, items, escorts, IO)
+function updateescortsavailable!(sorted_keys, items, escorts, escortid, blockmat) # remove the escorts that are blocked by previous item/escort assignment
+    io_x , io_y = IO
+    for key in sorted_keys
+        item = deepcopy(items[key])
+        x,y = item.coords
+        x_dir = io_x > x ? 1 : -1 
+        idxremove = [escortid]
+        idyremove = [escortid]
+    
+        for escort_id in item.escortsx
+            escort = escorts[escort_id]
+            ex, ey = escort.coords
+            xstart = min(x, ex)
+            xend   = max(x, ex)
+            path_blocked = false
+            for xx in xstart:xend
+                # blockmat entry is a tuple, skip if first value is 1
+                if blockmat[xx, y] == 1 
+                    path_blocked = true
+                    break
+                end
+            end
+            if path_blocked 
+                push!(idxremove, escort_id)
+            end
+            
+        end
+        for escort_id in item.escortsy
+            escort = escorts[escort_id]
+            ex, ey = escort.coords
+            ystart = min(y, ey)
+            yend   = max(y, ey)
+            path_blocked = false
+            for yy in ystart:yend
+                # blockmat entry is a tuple, skip if first value is 1
+                if blockmat[x, yy] == 1
+                    path_blocked = true
+                    break
+                end
+            end
+            if path_blocked
+                push!(idyremove, escort_id)
+            end
+        end  
+
+        item.escortsx = setdiff(item.escortsx, idxremove)
+        item.escortsy = setdiff(item.escortsy, idxremove)
+    end
+end
+
+function updateblockmat!( blockmat, item, escort) # ban the block between item and escort
+    itemx, itemy = item.coords
+    escortx, escorty = escort.coords
+    if  itemx == escortx
+        xstart = min(itemx, escortx)
+        xend = max(itemx, escortx)
+        for x in xstart:xend
+            blockmat[x, itemy] = 1
+        end
+    elseif itemy == escorty
+        ystart = min(itemy, escorty)
+        yend = max(itemy, escorty)
+        for y in ystart:yend
+            blockmat[itemx, y] = 1
+        end
+    end
+end
+function find_nearest_escort(item, blockmat, direction,escorts)
+    itemx, itemy = item.coords
+    nearest_id = 0
+    min_dist = Inf
+   
+    if direction == 1 # x_
+        for e_id in item.escortsx
+            escort_x, escort_y = escorts[e_id].coords 
+            if escort_y != itemy
+                println("saved escort in wrong position, direction x but y coord is different")
+            end
+            # Check blockmat between itemx and escort_x at y = itemy
+            xstart = min(itemx, escort_x)
+            xend   = max(itemx, escort_x)
+            path_blocked = false
+            for xx in xstart:xend
+                # blockmat entry is a tuple, skip if first value is 1
+                if blockmat[xx, itemy] == 1
+                    path_blocked = true
+                    break
+                end
+            end
+            if path_blocked
+                continue
+            end
+            dist = abs(escort_x - itemx)
+            if dist < min_dist
+                min_dist = dist
+                nearest_id = e_id
+            end
+        end
+    elseif direction == 2 # y
+        for e_id in item.escortsy
+            escort_x, escort_y = escorts[e_id].coords
+            if escort_x != itemx
+                println("saved escort in wrong position, direction y but x coord is different")
+            end
+
+            # Check blockmat between itemy and escort_y at x = itemx
+            ystart = min(itemy, escort_y)
+            yend   = max(itemy, escort_y)
+            path_blocked = false
+            for yy in ystart:yend
+                # blockmat entry is a tuple, skip if first value is 1
+                if blockmat[itemx, yy] == 1
+                    path_blocked = true
+                    break
+                end
+            end
+            if path_blocked
+                continue
+            end            
+            dist = abs(escort_y - itemy)
+            if dist < min_dist
+                min_dist = dist
+                nearest_id = e_id
+            end
+        end
+    end
+            
+       
+    
+    return nearest_id
+end
+function save_item_escorts!(matrix, items, escorts, IO) #saves all escorts for all items.
     io_x , io_y = IO
     for key in keys(items)
         item = items[key]
