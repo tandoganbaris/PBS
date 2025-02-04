@@ -10,8 +10,9 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
     for key in sorted_keys
         item = items[key]
         x,y = item.coords
+        sorted_keys = filter(x -> x != key, sorted_keys) # remove this item as now we will decide its future
         if length(item.escortsx) == 0 && length(item.escortsy) == 0
-            item.direction = 0 # not move
+            item.direction = 0 # not move               
             continue
         end
         if length(item.escortsx) == 0 && length(item.escortsy) > 0
@@ -20,13 +21,11 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
             if escortid == 0
                 println("No escort found for item ", key)
                 item.escortsy = Vector{Char}()
-                item.escortsx = Vector{Char}()
-                sorted_keys = filter(x -> x != key, sorted_keys)
                 continue
                 
             end
             updateblockmat!( blockmat, item, escorts[escortid])
-            sorted_keys = filter(x -> x != key, sorted_keys)
+           
             updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
         end
         if length(item.escortsy) == 0 && length(item.escortsx) > 0
@@ -34,13 +33,10 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
             escortid = find_nearest_escort(item, blockmat,1,escorts) 
             if escortid == 0
                 println("No escort found for item ", key)
-                item.escortsy = Vector{Char}()
                 item.escortsx = Vector{Char}()
-                sorted_keys = filter(x -> x != key, sorted_keys)
                 continue
             end
             updateblockmat!( blockmat, item, escorts[escortid])
-            sorted_keys = filter(x -> x != key, sorted_keys)
             updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
         end
         if length(item.escortsx) > length(item.escortsy) # prefer x direction
@@ -52,13 +48,11 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
                     println("No escort found both directions for item ", key)
                     item.escortsy = Vector{Char}()
                     item.escortsx = Vector{Char}()
-                    sorted_keys = filter(x -> x != key, sorted_keys)
                     continue
                 end
                 item.direction = 2
             end
             updateblockmat!( blockmat, item, escorts[escortid])
-            sorted_keys = filter(x -> x != key, sorted_keys)
             updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
         elseif length(item.escortsx) <= length(item.escortsy) # prefer y direction
             item.direction = 2 # move in y
@@ -69,13 +63,11 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
                     println("No escort found both directions for item ", key)
                     item.escortsy = Vector{Char}()
                     item.escortsx = Vector{Char}()
-                    sorted_keys = filter(x -> x != key, sorted_keys)
                     continue
                 end
                 item.direction = 1
             end
             updateblockmat!( blockmat, item, escorts[escortid])
-            sorted_keys = filter(x -> x != key, sorted_keys)
             updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
         end
         #Final assignment if escortid is not 0
