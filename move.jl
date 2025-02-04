@@ -1,6 +1,11 @@
 function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort removal and direction reassignment due to conflicts
     sorted_keys = sort(collect(keys(items)), by = x -> sum(length(items[x].escortx) + length(items[x].escorty)), rev = false)
     # sort the items by the increasing number of total escorts
+    for escort_id in keys(escorts) # reset the serving of items. 
+        escort = escorts[escort_id]
+        escort.itemsx = Vector{Char}()
+        escort.itemsy = Vector{Char}()
+    end
     blockmat = [0 for _ in 1:size(matrix, 1), _ in 1:size(matrix, 2)]
     for key in sorted_keys
         item = items[key]
@@ -11,10 +16,14 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
         end
         if length(item.escortsx) == 0 && length(item.escortsy) > 0
             item.direction = 2 # move in y
-            escortid = find_nearest_escort(item, blockmat,2,escorts)
+            escortid = find_nearest_escort(item, blockmat,2,escorts) # is 0 if no escort is available (path blocked)
             if escortid == 0
                 println("No escort found for item ", key)
+                item.escortsy = Vector{Char}()
+                item.escortsx = Vector{Char}()
+                sorted_keys = filter(x -> x != key, sorted_keys)
                 continue
+                
             end
             updateblockmat!( blockmat, item, escorts[escortid])
             sorted_keys = filter(x -> x != key, sorted_keys)
@@ -22,22 +31,28 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
         end
         if length(item.escortsy) == 0 && length(item.escortsx) > 0
             item.direction = 1
-            escortid = find_nearest_escort(item, blockmat,1,escorts)
+            escortid = find_nearest_escort(item, blockmat,1,escorts) 
             if escortid == 0
                 println("No escort found for item ", key)
+                item.escortsy = Vector{Char}()
+                item.escortsx = Vector{Char}()
+                sorted_keys = filter(x -> x != key, sorted_keys)
                 continue
             end
             updateblockmat!( blockmat, item, escorts[escortid])
             sorted_keys = filter(x -> x != key, sorted_keys)
             updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
         end
-        if length(item.escortsx) > length(item.escortsy)
+        if length(item.escortsx) > length(item.escortsy) # prefer x direction
             item.direction = 1
             escortid = find_nearest_escort(item, blockmat,1,escorts)
             if escortid == 0
                 escortid = find_nearest_escort(item, blockmat,2,escorts)
                 if escortid == 0
                     println("No escort found both directions for item ", key)
+                    item.escortsy = Vector{Char}()
+                    item.escortsx = Vector{Char}()
+                    sorted_keys = filter(x -> x != key, sorted_keys)
                     continue
                 end
                 item.direction = 2
@@ -45,13 +60,16 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
             updateblockmat!( blockmat, item, escorts[escortid])
             sorted_keys = filter(x -> x != key, sorted_keys)
             updateescortsavailable!(sorted_keys,items, escorts, escortid, blockmat)
-        elseif length(item.escortsx) <= length(item.escortsy)
+        elseif length(item.escortsx) <= length(item.escortsy) # prefer y direction
             item.direction = 2 # move in y
             escortid = find_nearest_escort(item, blockmat,2,escorts)
             if escortid == 0
                 escortid = find_nearest_escort(item, blockmat,1,escorts)
                 if escortid == 0
                     println("No escort found both directions for item ", key)
+                    item.escortsy = Vector{Char}()
+                    item.escortsx = Vector{Char}()
+                    sorted_keys = filter(x -> x != key, sorted_keys)
                     continue
                 end
                 item.direction = 1
@@ -63,10 +81,10 @@ function item_escort_assigment!(matrix, items, escorts, IO) # TODO: add escort r
         #Final assignment if escortid is not 0
         if item.direction == 2
             item.escortsy = [escortid] 
-            item.escort_x = Vector{Char}()
+            item.escortsx = Vector{Char}()
             escorts[escortid].itemsy = [key]
         elseif item.direction == 1
-            item.escort_x = [escortid]
+            item.escortsx = [escortid]
             item.escortsy = Vector{Char}()
             escorts[escortid].itemsx = [key]
         end
