@@ -6,12 +6,16 @@ function plot_matrix(matrix, items, escorts, IO)
     heatmap_matrix = fill(1, nrows, ncols)
     
  
-    for (char, (r, c)) in items
+    for item in items
+        char = item.id
+        r,c = item.coords
         heatmap_matrix[r, c] = 2
     end
     
  
-    for (char, (r, c)) in escorts
+    for escort in escorts
+        char = escort.id
+        (r,c) = escort.coords
         heatmap_matrix[r, c] = 3
     end
     

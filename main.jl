@@ -1,5 +1,5 @@
 
-function main(initialstate, picklist)
+function main(initialstate, picklist, IO)
     itemstopick = deepcopy(picklist)
     incumbentstate = deepcopy(initialstate)
     n= 3 # batch size
@@ -8,7 +8,7 @@ function main(initialstate, picklist)
     escorts = findescorts(incumbentstate) # escorts char may have identifier? like E1, E2, E3
     time = 0
     while isempty(itemstopick) == false
-        if length(batchofids) <= n-r #decide on batch 
+        if length(batch) <= n-r #decide on batch 
             newcandidates = createbatch(itemstopick, incumbentstate, time, r) 
             push!(batch, newcandidates)
         end
@@ -24,6 +24,7 @@ function main(initialstate, picklist)
         #move blocks with escorts,  # todo, use blockmat and escort assignment
         #move remaining escorts to best positon # use blockmat 
         moveescorts!(incumbentstate, items, escorts, moverescortids, blockmat, IO)
+        plot_matrix(incumbentstate, items, escorts, IO)
         time +=1
     end
 end
