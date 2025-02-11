@@ -1,29 +1,28 @@
 
 using Plots
-
 function plot_matrix(matrix, items, escorts, IO)
-    nrows, ncols = size(matrix)
-    heatmap_matrix = fill(1, nrows, ncols)
+    # In this version, matrix has dimensions (ncols, nrows)
+    ncols, nrows = size(matrix)
+    heatmap_matrix = fill(1, ncols, nrows)  # fill first dimension as columns, second as rows
     
- 
-    for item in items
-        char = item.id
-        r,c = item.coords
-        heatmap_matrix[r, c] = 2
+    # Mark items (storing them at [col, row])
+    for itemid in keys(items)
+        item = items[itemid]  # Suppose item.coords = (col, row)
+        c, r = item.coords
+        heatmap_matrix[c, r] = 2
     end
-    
- 
-    for escort in escorts
-        char = escort.id
-        (r,c) = escort.coords
-        heatmap_matrix[r, c] = 3
+
+    for escortid in keys(escorts)
+        escort= escorts[escortid]
+        c, r = escort.coords
+        heatmap_matrix[c, r] = 3
     end
     
     heatmap_colors = [:lightblue, :tomato, :linen]
     
     p = heatmap(
-        heatmap_matrix,
-        color=heatmap_colors,
+        heatmap_matrix',  # transpose here
+        color=[ :lightblue, :tomato, :linen ],
         axis=false,
         xlims=(0.5, ncols + 0.5),
         ylims=(0.5, nrows + 0.5),
@@ -31,21 +30,24 @@ function plot_matrix(matrix, items, escorts, IO)
         legend=false,
         colorbar=false
     )
- 
-    for i in 1:nrows+1
-        plot!(p, [0.5, ncols+0.5], [i-0.5, i-0.5], color=:black, lw=1)
+
+    # Draw grid lines
+    for col in 1:ncols+1
+        plot!(p, [col - 0.5, col - 0.5], [0.5, nrows + 0.5], color=:black, lw=1)
     end
-    for j in 1:ncols+1
-        plot!(p, [j-0.5, j-0.5], [0.5, nrows+0.5], color=:black, lw=1)
+    for row in 1:nrows+1
+        plot!(p, [0.5, ncols + 0.5], [row - 0.5, row - 0.5], color=:black, lw=1)
     end
     
-    for i in 1:nrows
-        for j in 1:ncols
-            annotate!(p, j, i, text(matrix[i, j], :black, :center))
+    # Annotate the cells
+    for col in 1:ncols
+        for row in 1:nrows
+            annotate!(p, col, row, text(matrix[col, row], :black, :center))
         end
     end
-    
-    r, c = IO
+
+    # Draw the IO square
+    c, r = IO
     plot!(
         p,
         [c-0.5, c+0.5, c+0.5, c-0.5, c-0.5],
@@ -57,7 +59,24 @@ function plot_matrix(matrix, items, escorts, IO)
     
     return p
 end
+function get_base_filename(filepath::String)
+    basename = split(filepath, '\\') |> last  # Extracts the file name part
+    return split(basename, '.')[1]  # Removes the extension
+end
+function save_plot(saveplot, matrix, items, escorts, IO, filepath::String, save_directory::String)
+    if saveplot
+        plt = plot_matrix(matrix, items, escorts, IO)
+        base_filename = filepath#get_base_filename(filepath)
+        new_filename = joinpath(save_directory, base_filename * "_state.png")    
+        # Save the plot
+        savefig(new_filename)
+
+        return new_filename
+    end  # Return the path of the saved file for confirmation
+end
+
 # Example usage
+#=
 matrix = [
     'a' 'b' 'c' 'd' 'e' 'f' 'g' 'h';
     'i' 'j' 'k' 'l' 'm' 'n' 'o' 'p';
@@ -71,3 +90,4 @@ items   = Dict('a' => (2,3), 'e' => (2,7))
 escorts = Dict('c' => (5,2), 'i' => (3,5))
 io = (1,1)
 plot_matrix(matrix, items, escorts, io)
+=#
