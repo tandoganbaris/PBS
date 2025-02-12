@@ -30,7 +30,7 @@ function randomintialstate(matrixsize, noescorts, items, rng)
         currid = all_names[idx] 
         state[i, j] = currid
         if currid  in escort_names
-            escort = createescort(currid, (i,j), false)
+            escort = createescort(currid, (i,j), 0)
             escorts[currid] = escort
         elseif  currid in keys(items)
             item= createitem(currid, (i,j), items[currid])
@@ -79,18 +79,27 @@ pushes either the most urgent of the closest items to batch
 function createbatch!(itemstopick, incumbentstate, time, n, IO)
     batch = Dict{String, Any}()
     iox, ioy = IO
+    for itemid in keys(itemstopick)
+        item = itemstopick[itemid]
+        for i in 1:size(incumbentstate, 1), j in 1:size(incumbentstate, 2)
+            if incumbentstate[i, j] == itemid
+            item.coords = (i, j)
+            break
+            end
+        end        
+    end
     distances = Dict(itemid => abs(items[itemid].coords[1] - iox) + abs(items[itemid].coords[2] - ioy) for itemid in keys(itemstopick))
     
     sorted_distances = sort(collect(distances), by = x -> x[2])
     for itemid in keys(itemstopick)
-        item= items[itemid]
+        item= itemstopick[itemid]
         if item.deadline <= time && length(keys(batch)) < n
             batch[itemid] = item
         end
     end
     while length(batch) < n && !isempty(sorted_distances)
         itemid = sorted_distances[1][1]
-        item = items[itemid]
+        item = itemstopick[itemid]
         batch[itemid] = item
         if haskey(itemstopick, itemid)
             delete!(itemstopick, itemid)
@@ -109,7 +118,7 @@ function main(initialstate, items, escorts, IO)
     batch = createbatch!(itemstopick, incumbentstate, time, n, IO)
    
     while !(isempty(itemstopick)&&isempty(batch))
-        savemakespan_item!(makespandict, itemstopick, batch, incumbentstate, IO, time)
+        savemakespan_item!(makespandict, itemstopick, batch, incumbentstate, IO, time) # deletes items from batch 
         if length(batch) <= n-r #decide on batch 
             newcandidates = createbatch!(itemstopick, incumbentstate, time, r, IO) 
             if !isempty(newcandidates)
@@ -119,18 +128,19 @@ function main(initialstate, items, escorts, IO)
                     end
                 end
             end
+            if isempty(batch)
+                break
+            end
         end 
-        #save escorts for items # done
+        
+        #save escorts for items 
         save_item_escorts!(incumbentstate, batch, escorts, IO)
-        #assign escorts for items unique # mostly done
+
+        #assign escorts for items unique
         moverescortids, blockmat = item_escort_assigment!(incumbentstate, batch, escorts, IO) 
  
-        
-        #save future coords of items # not done, blockmat done
-        #decide where the escorts should land after moving # todo
-        #move blocks with escorts,  # todo, use blockmat and escort assignment
-        #move remaining escorts to best positon # use blockmat 
-        incumbentstate = moveescorts!(incumbentstate, batch, escorts, moverescortids, blockmat, IO)
+    
+        incumbentstate = moveescorts!(time, incumbentstate, batch, escorts, moverescortids, blockmat, IO)
         save_plot(saveplot, incumbentstate, batch, escorts, IO, "$(time)_test", save_directory)
         time +=1
     end
@@ -138,7 +148,7 @@ function main(initialstate, items, escorts, IO)
 end
 
 
-item_deadlines = Dict("$i" => rand() * 100 for i in 1:3)
+item_deadlines = Dict("$i" => rand() * 100 for i in 1:6)
 IO= (3,1)
 initialstate, items, escorts = randomintialstate((5, 5), 2, item_deadlines, rng)
 save_directory = raw"C:\codestuff\PBS\plots\\"

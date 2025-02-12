@@ -20,10 +20,10 @@ mutable struct escort
     coords::Tuple{Int64, Int64} # x, y
     itemsx::Vector{String} # items served by x now
     itemsy::Vector{String} # items served by y now
-    fix::Bool # if the escort is fixed
+    lastmoved::Int64 # if the escort is fixed
 end
-function createescort(id::String, coords::Tuple{Int64, Int64}, fix::Bool)
+function createescort(id::String, coords::Tuple{Int64, Int64}, lastmoved::Int64= 0)
     itemsx = Vector{String}()
     itemsy = Vector{String}()
-    return escort(id, coords, itemsx, itemsy, fix)
+    return escort(id, coords, itemsx, itemsy, lastmoved)
 end
