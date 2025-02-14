@@ -21,9 +21,11 @@ mutable struct escort
     itemsx::Vector{String} # items served by x now
     itemsy::Vector{String} # items served by y now
     lastmoved::Int64 # if the escort is fixed
+    banset:: Dict{Int64, Vector{String}} # items that cannot be served by the escort
 end
 function createescort(id::String, coords::Tuple{Int64, Int64}, lastmoved::Int64= 0)
     itemsx = Vector{String}()
     itemsy = Vector{String}()
-    return escort(id, coords, itemsx, itemsy, lastmoved)
+    banset = Dict{Int64, Vector{String}}()
+    return escort(id, coords, itemsx, itemsy, lastmoved, banset)
 end

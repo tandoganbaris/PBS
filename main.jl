@@ -76,28 +76,31 @@ end
 """
 pushes either the most urgent of the closest items to batch
 """
-function createbatch!(itemstopick, incumbentstate, time, n, IO)
+function createbatch!(itemstopick, incumbentstate, time, r, IO)
     batch = Dict{String, Any}()
     iox, ioy = IO
-    for itemid in keys(itemstopick)
-        item = itemstopick[itemid]
-        for i in 1:size(incumbentstate, 1), j in 1:size(incumbentstate, 2)
-            if incumbentstate[i, j] == itemid
+
+    for i in 1:size(incumbentstate, 1), j in 1:size(incumbentstate, 2)
+        if incumbentstate[i, j] in keys(itemstopick)
+            item = itemstopick[incumbentstate[i, j]]
             item.coords = (i, j)
-            break
-            end
-        end        
-    end
+        end
+    end        
+    
     distances = Dict(itemid => abs(items[itemid].coords[1] - iox) + abs(items[itemid].coords[2] - ioy) for itemid in keys(itemstopick))
     
     sorted_distances = sort(collect(distances), by = x -> x[2])
     for itemid in keys(itemstopick)
         item= itemstopick[itemid]
-        if item.deadline <= time && length(keys(batch)) < n
+        if item.deadline <= time && length(keys(batch)) < r
             batch[itemid] = item
+            if haskey(itemstopick, itemid)
+                delete!(itemstopick, itemid)
+            end
+            deleteat!(sorted_distances, 1)
         end
     end
-    while length(batch) < n && !isempty(sorted_distances)
+    while length(batch) < r && !isempty(sorted_distances)
         itemid = sorted_distances[1][1]
         item = itemstopick[itemid]
         batch[itemid] = item
@@ -121,7 +124,7 @@ function main(initialstate, items, escorts, IO)
         savemakespan_item!(makespandict, itemstopick, batch, incumbentstate, IO, time) # deletes items from batch 
         if length(batch) <= n-r #decide on batch 
             newcandidates = createbatch!(itemstopick, incumbentstate, time, r, IO) 
-            if !isempty(newcandidates)
+            if !isempty(keys(newcandidates))
                 for (key, value) in newcandidates
                     if !haskey(batch, key)
                         batch[key] = value
@@ -132,12 +135,14 @@ function main(initialstate, items, escorts, IO)
                 break
             end
         end 
-        
+        if time == 54
+            print("break")
+        end
         #save escorts for items 
         save_item_escorts!(incumbentstate, batch, escorts, IO)
 
         #assign escorts for items unique
-        moverescortids, blockmat = item_escort_assigment!(incumbentstate, batch, escorts, IO) 
+        moverescortids, blockmat = item_escort_assigment!(incumbentstate, batch, escorts, time, IO) 
  
     
         incumbentstate = moveescorts!(time, incumbentstate, batch, escorts, moverescortids, blockmat, IO)
@@ -148,13 +153,12 @@ function main(initialstate, items, escorts, IO)
 end
 
 
-item_deadlines = Dict("$i" => rand() * 100 for i in 1:6)
-IO= (3,1)
-initialstate, items, escorts = randomintialstate((5, 5), 2, item_deadlines, rng)
+item_deadlines = Dict("$i" => Float64(1000 - i * 10) for i in 1:10) 
+IO= (1,1)
+initialstate, items, escorts = randomintialstate((10, 10), 2, item_deadlines, rng)
 save_directory = raw"C:\codestuff\PBS\plots\\"
-iteration = 0
 global saveplot = true # TURN OFF FOR DEBUGGING
-save_plot(saveplot, initialstate, items, escorts, IO, "$(iteration)_test", save_directory)
+save_plot(saveplot, initialstate, items, escorts, IO, "$(0)_test", save_directory)
 
 
 finalstate, retrievaltimes = main(initialstate, items, escorts, IO)
