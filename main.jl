@@ -154,6 +154,7 @@ end
 
 
 item_deadlines = Dict("$i" => Float64(1000 - i * 10) for i in 1:10) 
+#item_deadlines = Dict("$i" => Float64(20 + (i - 1) * 15) for i in 1:10)
 IO= (1,1)
 initialstate, items, escorts = randomintialstate((10, 10), 2, item_deadlines, rng)
 save_directory = raw"C:\codestuff\PBS\plots\\"
