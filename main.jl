@@ -115,7 +115,7 @@ function main(initialstate, items, escorts, IO)
     itemstopick = deepcopy(items)
     incumbentstate = deepcopy(initialstate)
     makespandict = Dict{String, Int64}()
-    n= 3 # batch size
+    n= 7 # batch size
     r = 1 # replenishment size
     time = 0
     batch = createbatch!(itemstopick, incumbentstate, time, n, IO)
@@ -135,7 +135,7 @@ function main(initialstate, items, escorts, IO)
                 break
             end
         end 
-        if time == 54
+        if time == 31
             print("break")
         end
         #save escorts for items 
@@ -158,7 +158,7 @@ item_deadlines = Dict("$i" => Float64(1000 - i * 10) for i in 1:10)
 IO= (1,1)
 initialstate, items, escorts = randomintialstate((10, 10), 2, item_deadlines, rng)
 save_directory = raw"C:\codestuff\PBS\plots\\"
-global saveplot = true # TURN OFF FOR DEBUGGING
+global saveplot = true  # TURN OFF FOR DEBUGGING
 save_plot(saveplot, initialstate, items, escorts, IO, "$(0)_test", save_directory)
 
 

@@ -23,7 +23,7 @@ function item_escort_assigment!(matrix, items, escorts, iteration, IO)
             item.direction = 2 # move in y
             escortid = find_nearest_escort(item, items, sorted_keys, matrix, IO, blockmat,2,escorts, iteration) # is 0 if no escort is available (path blocked)
             if escortid == 0
-                println("No escort found for item ", key)
+                #println("No escort found for item ", key)
                 item.escortsy = Vector{String}()
                 continue
                 
@@ -36,7 +36,7 @@ function item_escort_assigment!(matrix, items, escorts, iteration, IO)
             item.direction = 1
             escortid = find_nearest_escort(item, items, sorted_keys, matrix, IO, blockmat,1,escorts, iteration) 
             if escortid == 0
-                println("No escort found for item ", key)
+                #println("No escort found for item ", key)
                 item.escortsx = Vector{String}()
                 continue
             else
@@ -52,7 +52,7 @@ function item_escort_assigment!(matrix, items, escorts, iteration, IO)
             if escortid == 0
                 escortid = find_nearest_escort(item, items, sorted_keys, matrix, IO, blockmat, secondary_dir, escorts, iteration)
                 if escortid == 0
-                    println("No escort found both directions for item ", key)
+                    #println("No escort found both directions for item ", key)
                     item.escortsy = Vector{String}()
                     item.escortsx = Vector{String}()
                     continue
@@ -316,11 +316,26 @@ function find_nearest_escort(item, items, sorted_keys, matrix, IO, blockmat, dir
         end
     end
     if nearest_id != 0
-        futurecoords = generatefuturecoords(items, direction, nearest_id, item.id, matrix, IO)
-        if !path_to_io_exists_if(matrix, futurecoords, IO)
-            item.direction = 0
-            return 0
+        escort_x, escort_y = escorts[nearest_id].coords
+        if ((abs(IO[1] - escort_x) + abs(IO[2] - escort_y)) <= length(keys(items))+1) # escort in close proximity to IO, therefore its move will be controlled
+            futurecoords = generatefuturecoords(items, direction, nearest_id, item.id, matrix, IO)
+            samecoords =[]
+            if direction == 2
+                samecoords = filter(x -> x[1] == itemx &&  x[2] >= min(itemy, escort_y) && x[2] <= max(itemy, escort_y), futurecoords)
+            elseif direction ==1
+                samecoords = filter(x -> x[2] == itemy &&  x[1] >= min(itemx, escort_x) && x[1] <= max(itemx, escort_x), futurecoords)
+            end
+            if !isempty(samecoords)
+                minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samecoords])
+                if minDist <= length(keys(items))+1 && # item far out from IO
+                    !path_to_io_exists_if(matrix, futurecoords, IO)   # check with A* if this movement would cause some stupid block
+                    item.direction = 0
+                    return 0
+                end        
+            end
         end
+        
+        
         for key in doubleserve # we are lucky to serve two items 
             filter!(x -> x != key, sorted_keys)
             items[key].direction = direction
@@ -503,6 +518,213 @@ function path_to_io_exists_if(matrix, itemscoords, IO)
     #print_matrix(future_blocked, visited)
     return false
 end
+function outwards_astar(matrix, IO, blockmat, escorts, items)
+    rows, cols = size(matrix)
+    allkeys = vcat(keys(escorts), keys(items))
+    itemcoords = [(items[key].coords[1], items[key].coords[2]) for key in keys(items)]
+    escortcoords = [(escorts[key].coords[1], escorts[key].coords[2]) for key in keys(escorts)]
+    allcoords = vcat(itemcoords, escortcoords)
+    x_max, y_max = 1, 1
+
+    # Mark future positions
+    future_blocked = deepcopy(blockmat)
+    for pair in allcoords
+        x, y = pair
+        if pair != IO
+            future_blocked[x, y] = 1
+        end
+        x_max = max(x_max, x)
+        y_max = max(y_max, y)
+    end
+    while blockmat[x_max,y_max] ==1 || matrix[x_max,y_max] in allkeys
+        if x_max < cols
+            x_max += 1
+        elseif y_max < rows
+            y_max += 1
+        end
+    end
+
+    startcoords = (x_max, y_max)
+
+    # A* search setup
+    visited = zeros(Int, rows, cols)
+    dist = fill(Inf, rows, cols)
+    open_set = BinaryMinHeap{Tuple{Float64, Int, Int}}()  # Store (priority, x, y)
+
+    # Manhattan heuristic
+    h(x, y) = abs(x - startcoords[1]) + abs(y - startcoords[2])
+
+    dist[IO[1], IO[2]] = 0
+    priority = dist[IO[1], IO[2]] + h(IO[1], IO[2])
+    push!(open_set, (priority, IO[1], IO[2]))
+
+    found_path = false
+
+    # A* loop
+    while !isempty(open_set)
+        (priority, cx, cy) = pop!(open_set)
+
+        if visited[cx, cy] == 1
+            continue
+        end
+        visited[cx, cy] = 1
+
+        if (cx, cy) == startcoords
+            found_path = true
+            break
+        end
+
+        # Explore neighbors
+        for (nx, ny) in [(cx+1, cy), (cx-1, cy), (cx, cy+1), (cx, cy-1)]
+            if (nx, ny) == startcoords && future_blocked[nx, ny] == 1
+                println("issue with wrong dest writing")
+                found_path = true
+                break
+            end
+            if 1 ≤ nx ≤ rows && 1 ≤ ny ≤ cols && future_blocked[nx, ny] != 1
+                cost_here = dist[cx, cy] + 1
+                if cost_here < dist[nx, ny]
+                    dist[nx, ny] = cost_here
+                    priority = cost_here + h(nx, ny)
+                    push!(open_set, (priority, nx, ny))
+                end
+            end
+        end
+        if found_path
+            break
+        end
+    end
+
+    # Return whether we found a path and the entire distance matrix
+    return (found_path, dist)
+end
+function outwards_astar_with_dirchange(matrix, IO, blockmat, escortid, escorts, items)
+    iox, ioy = IO
+    rows, cols = size(matrix)
+    allkeys = vcat(keys(escorts), keys(items))
+    itemcoords = [(items[key].coords[1], items[key].coords[2]) for key in keys(items)]
+    escortcoords = [(escorts[key].coords[1], escorts[key].coords[2]) for key in keys(escorts) if key != escortid]
+    allcoords = vcat(itemcoords, escortcoords)
+    x_max, y_max = escorts[escortid].coords
+
+    # Mark future positions
+    future_blocked = deepcopy(blockmat)
+    for pair in allcoords
+        x, y = pair
+        if pair != IO
+            future_blocked[x, y] = 1
+        end
+    end
+ 
+
+    startcoords = (x_max, y_max)
+
+    # Directions: 1 = none/initial, 2 = horizontal, 3 = vertical
+    dist = fill(Inf, rows, cols, 3)
+    visited = fill(false, rows, cols, 3)
+
+    # If x1 == x2 => movement must be vertical (3), else horizontal (2)
+    function dir_type(x1, y1, x2, y2)
+        return (x1 == x2) ? 3 : 2
+    end
+
+    open_set = BinaryMinHeap{Tuple{Float64, Int, Int, Int}}()
+
+    # Manhattan heuristic
+    h(x, y) = 0.2* (abs(x - startcoords[1]) + abs(y - startcoords[2]))
+
+    # Initialize at IO with direction = 1 (none/initial)
+    dist[IO[1], IO[2], 1] = 0
+    init_priority = dist[IO[1], IO[2], 1] + h(IO[1], IO[2])
+    push!(open_set, (init_priority, IO[1], IO[2], 1))
+
+    found_path = false
+
+    # A* loop
+    while !isempty(open_set)
+        (priority, cx, cy, cdir) = pop!(open_set)
+
+        if visited[cx, cy, cdir]
+            continue
+        end
+        visited[cx, cy, cdir] = true
+
+        for (nx, ny) in [(cx+1, cy), (cx-1, cy), (cx, cy+1), (cx, cy-1)]
+            if 1 ≤ nx ≤ rows && 1 ≤ ny ≤ cols && future_blocked[nx, ny] != 1
+                ndir = dir_type(cx, cy, nx, ny)
+                # +1 for moving a step, plus +1 more if changing direction (excluding first step)
+                extra_cost = (cdir == 1 || cdir == ndir) ? 0 : 1  # Reduce penalty to 0.5
+                cost_here = dist[cx, cy, cdir] +  extra_cost
+                if cost_here < dist[nx, ny, ndir]
+                    dist[nx, ny, ndir] = cost_here
+                    new_priority = cost_here + h(nx, ny)
+                    push!(open_set, (new_priority, nx, ny, ndir))
+                end
+            end
+        end
+        if (cx, cy) == startcoords
+            # Ensure all slots between IOx and escx at coordinate escy are explored
+            x_step = sign(cx - iox)  # Determine direction of iteration
+            all_x_explored = true
+            if x_step !=0
+                for x in iox:x_step:cx
+                    if !visited[x, cy, cdir] && future_blocked[x, cy] != 1
+                        ndir = dir_type(cx, cy, x, cy)
+                        extra_cost = (cdir == 1 || cdir == ndir) ? 0 : 1
+                        cost_here = dist[cx, cy, cdir] + extra_cost
+            
+                        if cost_here < dist[x, cy, ndir]
+                            dist[x, cy, ndir] = cost_here
+                            new_priority = cost_here + h(x, cy)
+                            push!(open_set, (new_priority, x, cy, ndir))
+                            visited[x, cy, cdir] = true  # ✅ Mark as visited
+                        end
+                    end
+                end
+                all_x_explored = all(visited[x, cy, cdir] || future_blocked[x, cy] == 1 for x in iox:x_step:cx)
+            end
+
+        
+            # Ensure all slots between IOy and escy at coordinate escx are explored
+            y_step = sign(cy - ioy)  # Determine direction of iteration
+            all_y_explored = true
+            if y_step != 0 
+                for y in ioy:y_step:cy
+                    if !visited[cx, y, cdir] && future_blocked[cx, y] != 1
+                        ndir = dir_type(cx, cy, cx, y)
+                        extra_cost = (cdir == 1 || cdir == ndir) ? 0 : 1
+                        cost_here = dist[cx, cy, cdir] + extra_cost
+            
+                        if cost_here < dist[cx, y, ndir]
+                            dist[cx, y, ndir] = cost_here
+                            new_priority = cost_here + h(cx, y)
+                            push!(open_set, (new_priority, cx, y, ndir))
+                            visited[cx, y, cdir] = true  # ✅ Mark as visited
+                        end
+                    end
+                end
+                all_y_explored = all(visited[cx, y, cdir] || future_blocked[cx, y] == 1 for y in ioy:y_step:cy)
+            end
+        
+            
+        
+            if all_x_explored && all_y_explored  # ✅ Only mark found if the full range is covered
+                found_path = true
+                break
+            end
+        end
+    end
+
+    # Convert dist into a 2D cost by taking the minimum cost ignoring direction
+    min_cost = fill(Inf, rows, cols)
+    for x in 1:rows
+        for y in 1:cols
+            min_cost[x, y] = floor(minimum(dist[x, y, 1:3]))
+        end
+    end
+
+    return (found_path, min_cost)
+end
 function save_item_escorts!(matrix, items, escorts, IO) #saves all escorts for all items.
     io_x , io_y = IO
     for key in keys(items)
@@ -598,6 +820,7 @@ moves all escorts, starting with the mover escorts
 """
 function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockmat, IO)
 # MOVERS FIRST
+    iox, ioy = IO
     if iteration == 15 
         println("here")
     end
@@ -626,17 +849,19 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
         escortx, escorty = escorts[escortid].coords
         # Here onwards until the move_escort! function, we find the nearest item where this escort could be useful in next time step
         candid,candx,candy = find_nearest_item_toitem(matrix, items, itemid, blockmat, IO, direction)
+        gapx, gapy = abs(candx - iox), abs(candy - ioy)
         if direction == 1
             if candid == 0 || candx == itemx
                 escort_finalcoords = (itemx, escorty)
             else 
-                if items[candid].direction == 1 # moving in x
-                    if IO[1] > min(itemx, candx) 
+                
+                if items[candid].direction == 1 ||  gapx < gapy # moving in x
+                    if iox > min(itemx, candx) 
                         escort_finalcoords = (max(1, candx+1), itemy) # IO on the right
-                    else IO[1] < min(itemx, candx)
+                    else iox < min(itemx, candx)
                         escort_finalcoords = (max(1, candx-1), itemy) # IO on the left
                     end
-                elseif items[candid].direction == 2 # moving in y
+                elseif items[candid].direction == 2 || gapy <= gapx # moving in y
                     escort_finalcoords = (candx, itemy)
                 end
             end
@@ -644,9 +869,9 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
             if candid == 0 || candy == itemy
                 escort_finalcoords = (escortx, itemy)
             else 
-                if items[candid].direction == 1 # moving in x
+                if items[candid].direction == 1 ||  gapx < gapy# moving in x
                     escort_finalcoords = (itemx, candy) 
-                elseif items[candid].direction == 2 # moving in y
+                elseif items[candid].direction == 2 || gapy <= gapx# moving in y
                     escort_finalcoords = (itemx, max(1, candy-1))
                 end
             end
@@ -661,7 +886,7 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
     end
     
     # First, filter the customers:
-    urgentcustomers = filter(customer_id ->  floor(Int,iteration+ (abs(IO[1] -items[customer_id].coords[1]) + items[customer_id].coords[2]) * 1.5) >= items[customer_id].deadline,keys(items))
+    urgentcustomers = filter(customer_id ->  floor(Int,iteration+ (abs(iox -items[customer_id].coords[1]) + items[customer_id].coords[2]) * 1.5) >= items[customer_id].deadline,keys(items))
     urgentmatrixes = urgmats(items, escorts, blockmat, matrix, urgentcustomers, IO)
     
     
@@ -682,17 +907,18 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
         empty_spaces += 1
     end
     distance_to_IO = -euclidean_distance((esc_x, esc_y), IO)  # negative for descending
-    return (distance_to_IO, empty_spaces)
-end, rev=false)
-    
+        return (distance_to_IO, empty_spaces)
+    end, rev=false)
+
     for escortid in nonmovers
-        
+        worked, asternmat = outwards_astar_with_dirchange(matrix, IO, blockmat,escortid,escorts,items)
         esc_x , esc_y = escorts[escortid].coords
         if blockmat[esc_x, esc_y] == 1
             continue
         end
-        escort_finalcoords = find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid, urgentmatrixes, blockmat, IO)
+        escort_finalcoords = find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid, urgentmatrixes,asternmat, blockmat, IO)
         if escort_finalcoords != (esc_x,esc_y)
+            push!(escorts[escortid].tabu, escort_finalcoords)
             matrix = move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
             updateblockmat_e!(blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
             escorts[escortid].lastmoved = iteration
@@ -779,7 +1005,7 @@ end
 """
 in the effort to moveescorts! bit misleading name as if no item is found we try to come near to IO as this will allow us to move better in next time step
 """
-function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid, urgmats, blockmat, IO)
+function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid, urgmats, asternmat, blockmat, IO)
     strategy = IO[1] == 1 ? 1 : IO[1] == size(matrix, 1) ? 3 : 2 # 1: left, 2: middle, 3: right
 
     thisescort = escorts[escortid]
@@ -795,7 +1021,7 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             (IO[1] > itemx && esc_x > itemx)) && itemx != esc_x
             ygap = abs(esc_y - itemy)
             path_blocked = false
-            if ygap < disty && ygap > 0 # if gap is 0 we could have served, there must be a reason we didnt
+            if ygap <= disty && ygap > 0 # if gap is 0 we could have served, there must be a reason we didnt
                 ymin = min(esc_y, itemy)
                 ymax = max(esc_y, itemy)
                
@@ -818,7 +1044,7 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             end
             if !path_blocked || (ygap == 0 && ((esc_x < itemx && IO[1] < itemx) || (esc_x > itemx && IO[1] > itemx)))
                 itemscoords = generatefuturecoords(items, 1, escortid, itemid, matrix, IO)
-                sameycoords = filter(x -> x[2] == itemy, itemscoords) # as moving this item might move another item closer to depot
+                sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
                 if minDist  > length(keys(items))+1 || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
@@ -836,7 +1062,7 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
         if esc_y < itemy # check if we can move escort to item path on Y 
             xgap = abs(esc_x - itemx)
             path_blocked = false
-            if xgap < distx && xgap > 0
+            if xgap <= distx && xgap > 0
                 xmin = min(esc_x, itemx)
                 xmax = max(esc_x, itemx)
                 for x in xmin:xmax
@@ -850,7 +1076,7 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             end
             if !path_blocked || xgap==0 # if gap is 0 we could have served, there must be a reason we didnt 
                 itemscoords = generatefuturecoords(items, 2, escortid, itemid, matrix, IO)
-                samexcoords = filter(x -> x[1] == itemx, itemscoords) # as moving this item might move another item closer to depot
+                samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
                 if  minDist > length(keys(items))+1 ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
@@ -900,7 +1126,7 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             candidy = 0; xin = deepcopy(esc_x); yin = deepcopy(esc_y); candidx = 0; gapy = Inf ; gapx = Inf
             if urgmat[esc_x, esc_y] == 2
                 #println("Escort is 2 steps away from urgent item, should have served in previous step")
-                continue # TODO, push to the front of the item if possible
+                continue 
             end
             while !completedy 
                 if esc_x <= urgx
@@ -1073,7 +1299,6 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             #delete!(urgmats, min_key)
             return (min_tuple[2], min_tuple[3]) # we also need some sort of commitment. using the banset I assume TODO 
         end 
-
     end
     # FREE ROAM; GO SOMEWHERE ELSE/FREE IF POSSIBLE
     if closestx ==0  && closesty == 0 # Most complex part of this entire algorithm, even if A* said no dont do it now we do it if we are blocked anyways
@@ -1082,20 +1307,20 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             return (esc_x, esc_y) # best place it could be 
         elseif esc_x == IO[1] # TRY  go down, if thats not good then left/right
             avg_y = mean([items[item].coords[1] for item in keys(items)])
-            maxmove_y = checkmatrixforblock!(blockmat, matrix, 1, -2, escortid, strategy, iteration, escorts, items)
-            if (maxmove_y == esc_y) || matrix[esc_x, maxmove_y ] in keys(escorts) #cannot move down enough , move out of the way right or left 
+            maxmove_y = checkmatrixforblock!(blockmat, matrix, 1, -2, escortid, strategy, iteration, escorts, items, IO)
+            if (maxmove_y == esc_y) || matrix[esc_x, maxmove_y ] in keys(escorts) || (esc_x, maxmove_y) in thisescort.tabu #cannot move down enough , move out of the way right or left 
                 avg_x = mean([items[item].coords[1] for item in keys(items)]) # where are the items ? 
                 diresc= avg_x <= IO[1] ? 1 : -1 # if items are left we go right, vice versa
                 for _ in 1:2 # Try both directions if the first choice fails
                     if diresc == 1 || IO[1] ==1 # chose right
                         maxmove = size(matrix, 1)
-                        maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strategy, iteration, escorts, items)
+                        maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strategy, iteration, escorts, items, IO)
                         if maxmove > esc_x # can move right
                             return (maxmove, esc_y)
                         end
                     elseif diresc == -1 || IO[1] ==1# chose left
                         maxmove = 1
-                        maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strategy, iteration, escorts, items)
+                        maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strategy, iteration, escorts, items,IO)
                         if maxmove < esc_x # can move left
                             return (maxmove, esc_y)
                         end
@@ -1109,8 +1334,8 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             if esc_x < IO[1] # io on the right
                 valid_x = [x for x in (esc_x+1):IO[1] if (blockmat[x, esc_y] == 1 || matrix[x, esc_y] in keys(items)|| matrix[x, esc_y] in keys(escorts))]
                 maxmove_x = isempty(valid_x) ? IO[1] : minimum(valid_x)-1 
-                if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts)
-                    minup = checkmatrixforblock!(blockmat, matrix, maxmove_x, 2, escortid, strategy, iteration, escorts, items)
+                if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts)|| (maxmove_x, esc_y) in thisescort.tabu 
+                    minup = checkmatrixforblock!(blockmat, matrix, maxmove_x, 2, escortid, strategy, iteration, escorts, items,IO)
                     if minup > esc_y
                         return (esc_x, minup)
                     end
@@ -1118,8 +1343,8 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             else # io on the left
                 valid_x = [x for x in IO[1]:max(IO[1], esc_x-1) if (blockmat[x, esc_y] == 1 || matrix[x, esc_y] in keys(items)|| matrix[x, esc_y] in keys(escorts))]
                 maxmove_x = isempty(valid_x) ? IO[1] : (maximum(valid_x)+1)
-                if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts) 
-                    minup = checkmatrixforblock!(blockmat, matrix, maxmove_x, 2, escortid, strategy, iteration, escorts, items)
+                if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts) || (maxmove_x, esc_y) in thisescort.tabu 
+                    minup = checkasternmat(blockmat, matrix, 2, escortid, strategy, iteration, escorts, items,IO, asternmat)
                     if minup > esc_y
                         return (esc_x, minup)
                     end
@@ -1131,19 +1356,19 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             avg_x = mean([items[item].coords[1] for item in keys(items)])
             dirx= avg_x <= IO[1] ? 1 : -1 # try go to the opposite direction of the items to be able to serve them
          
-            maxmove_y = checkmatrixforblock!(blockmat, matrix, 1, -2, escortid, strategy, iteration, escorts, items)
-            if (maxmove_y == esc_y) # cannot move down enough , move out of the way right or left 
+            maxmove_y = checkasternmat(blockmat, matrix, -2, escortid, strategy, iteration, escorts, items,IO, asternmat)#checkmatrixforblock!(blockmat, matrix, 1, -2, escortid, strategy, iteration, escorts, items,IO)
+            if (maxmove_y == esc_y) || matrix[esc_x, maxmove_y ] in keys(escorts) || (esc_x, maxmove_y) in thisescort.tabu# cannot move down enough , move out of the way right or left 
 
                 if dirx == 1 # chose right
                     maxmove = size(matrix, 1)
-                    maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, dirx, escortid, strategy, iteration, escorts, items)
-                    if maxmove > esc_x # can move right
+                    maxmove = checkasternmat( blockmat, matrix, dirx, escortid, strategy, iteration, escorts, items,IO, asternmat) #checkmatrixforblock!(blockmat, matrix, maxmove, dirx, escortid, strategy, iteration, escorts, items,IO)
+                    if (maxmove > esc_x || !(matrix[maxmove, esc_y] in keys(escorts))) && !((maxmove, esc_y) in thisescort.tabu) # can move right
                         return (maxmove, esc_y)
                     end
                 elseif dirx == -1 # chose left
                     maxmove = 1
-                    maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, dirx, escortid, strategy, iteration, escorts, items)
-                    if maxmove < esc_x # can move left
+                    maxmove = checkasternmat( blockmat, matrix, dirx, escortid, strategy, iteration, escorts, items,IO, asternmat)#checkmatrixforblock!(blockmat, matrix, maxmove, dirx, escortid, strategy, iteration, escorts, items,IO)
+                    if (maxmove < esc_x || !(matrix[maxmove, esc_y] in keys(escorts))) && !((maxmove, esc_y) in thisescort.tabu) # can move left
                         return (maxmove, esc_y)
                     end
                 end
@@ -1152,8 +1377,8 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
                 return (esc_x, maxmove_y)
             end
               # havent returned so we couldnt go down or inwards , try upwards
-            minup = size(matrix,2)
-            minup = checkmatrixforblock!(blockmat, matrix, minup, 2, escortid, strategy, iteration, escorts, items)
+
+            minup = checkasternmat(blockmat, matrix, 2, escortid, strategy, iteration, escorts, items,IO, asternmat) #checkmatrixforblock!(blockmat, matrix, minup, 2, escortid, strategy, iteration, escorts, items,IO)
             if minup > esc_y
                 return (esc_x, minup)
             end
@@ -1162,41 +1387,154 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
             if escorts[escortid].lastmoved < iteration -1 # we allow one iteration no movement, else we trigger outwards movement
                 if dirx == 1 # chose right
                     maxmove = size(matrix, 1)
-                    maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, dirx, escortid, strategy, iteration, escorts, items)
-                    if maxmove > esc_x # can move right
+                    maxmove = checkasternmat( blockmat, matrix, dirx, escortid, strategy, iteration, escorts, items,IO, asternmat)
+                    if (maxmove > esc_x || !(matrix[maxmove, esc_y] in keys(escorts)))&& !((maxmove, esc_y) in thisescort.tabu) # can move right
                         return (maxmove, esc_y)
                     end
                 elseif dirx == -1 # chose left
                     maxmove = 1
-                    maxmove = checkmatrixforblock!(blockmat, matrix, maxmove, dirx, escortid, strategy, iteration, escorts, items)
-                    if maxmove < esc_x # can move left
+                    maxmove = checkasternmat( blockmat, matrix, dirx, escortid, strategy, iteration, escorts, items,IO, asternmat)
+                    if (maxmove < esc_x || !(matrix[maxmove, esc_y] in keys(escorts)))&& !((maxmove, esc_y) in thisescort.tabu) # can move left
                         return (maxmove, esc_y)
                     end
                 end
             end
         end
     end
-
-
     return (finx, finy) # cannot move
 end
-function checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strategy, iteration, escorts, items)
+function checkasternmat(blockmat, matrix, diresc, escortid, strategy, iteration, escorts, items, IO,asternmat)
     allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
     esc_x, esc_y = escorts[escortid].coords
+    
+    if diresc == 1 
+        valid_x_1 = [x for x in esc_x:size(matrix,1) if (blockmat[x, esc_y] == 1 || matrix[x, esc_y] in allkeys)] # right
+        if (isempty(valid_x_1) || minimum(valid_x_1) > esc_x+1)
+            maxmove = isempty(valid_x_1) ?  size(matrix,1) : minimum(valid_x_1)-1
+            valy = asternmat[esc_x, esc_y]+1 ;currmin = asternmat[esc_x, esc_y]
+            if strategy == 1 # prefer near leftside IO
+                for x in esc_x:maxmove
+                    currval = asternmat[x, esc_y]
+                    if currval < valy
+                        maxmove = x
+                        valy = currval
+                    end
+                end
+            else
+                for x in maxmove:-1:esc_x # backwards, as we want to move as far right as we can 
+                    currval = asternmat[x, esc_y]
+                    if currval < valy
+                        maxmove = x
+                        valy = currval
+                    end
+                end
+            end 
+            if valy >= currmin +1
+                return esc_x
+            else
+                return maxmove
+            end
+        else 
+            return esc_x
+        end
+    end
+    if diresc == -1 # going left checking 
+        valid_x_1m = [x for x in esc_x:-1:1 if (blockmat[x, esc_y] == 1 || matrix[x, esc_y] in allkeys)] # left
+        if (isempty(valid_x_1m) || maximum(valid_x_1m) < esc_x-1) # can move left
+            maxmove = isempty(valid_x_1m) ? 1 : (maximum(valid_x_1m)+1)
+            valy = asternmat[esc_x, esc_y]+1 ;currmin = asternmat[esc_x, esc_y]
+            if strategy == 3 # prefer near rightside IO
+                for x in esc_x:-1:maxmove
+                    currval = asternmat[x, esc_y]
+                    if currval < valy
+                        maxmove = x
+                        valy = currval
+                    end
+                end
+            else
+                for x in maxmove:esc_x # prefer far out
+                    currval = asternmat[x, esc_y]
+                    if currval < valy
+                        maxmove = x
+                        valy = currval
+                    end
+                end
+            end
+            if valy >= currmin +1
+                return esc_x
+            else
+                return maxmove
+            end
+        else 
+            return esc_x
+        end
+    end
+    if diresc == 2# lowest possible y
+        valid_y= [y for y in esc_y:size(matrix,2) if (blockmat[esc_x, y] == 1 || matrix[esc_x, y] in allkeys)] # up 
+        if isempty(valid_y) || minimum(valid_y) - 1 > esc_y # can move up
+            minup = isempty(valid_y) ? size(matrix, 2) : minimum(valid_y) - 1 
+            min_val = Inf
+            min_idx = esc_y
+            currmin = asternmat[esc_x, esc_y]
+            for y in esc_y:minup 
+                if asternmat[esc_x, y] < min_val && y != esc_y
+                    min_val = asternmat[esc_x, y]
+                    min_idx = y
+                end
+            end
+            if min_val >= currmin +1
+                return esc_y
+            else
+                return min_idx
+            end
+        else 
+            return esc_y
+        end
+    end
+    if diresc == -2 # lowest possible y
+        valid_y= [y for y in IO[2]:esc_y-1 if (blockmat[esc_x, y] == 1 || matrix[esc_x, y] in allkeys)] # up 
+        if (isempty(valid_y) || maximum(valid_y)+1 < esc_y) # can move up
+            range1 = isempty(valid_y) ? IO[2] : maximum(valid_y)+1
+            min_val, min_idx = Inf, esc_y; currmin = asternmat[esc_x, esc_y]
+            for y in range1:esc_y
+                if asternmat[esc_x, y] < min_val
+                    min_val = asternmat[esc_x, y]
+                    min_idx = y
+                end
+            end
+            if min_val >= currmin +1
+                return esc_y
+            else
+                return min_idx
+            end
+        else 
+            return esc_y
+        end
+    end
+    
+    
+    
+    return maxmove
+
+end
+function checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strategy, iteration, escorts, items, IO)
+    allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
+    esc_x, esc_y = escorts[escortid].coords
+    
     if diresc == 1 
         valid_x_1 = [x for x in esc_x:size(matrix,1) if (blockmat[x, esc_y] == 1 || matrix[x, esc_y] in allkeys)] # right
         if (isempty(valid_x_1) || minimum(valid_x_1) > esc_x+1)
             maxmove = isempty(valid_x_1) ?  size(matrix,1) : minimum(valid_x_1)-1
             if strategy == 1 # prefer near leftside IO
                 for x in esc_x:maxmove
-                    if directionclear(items, escorts, escortid, x, esc_y, 2 , iteration)
+                    if directionclear(items, escorts, escortid, x, esc_y, 2 ,  iteration,IO)
                         maxmove = x
                         break
                     end
                 end
             else
                 for x in maxmove:-1:esc_x # backwards, as we want to move as far right as we can 
-                    if directionclear(items, escorts, escortid, x, esc_y, 2, iteration)
+                    if directionclear(items, escorts, escortid, x, esc_y, 2, iteration,IO)
                         maxmove = x
                         break
                     end
@@ -1211,17 +1549,22 @@ function checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strat
         valid_x_1m = [x for x in esc_x:-1:1 if (blockmat[x, esc_y] == 1 || matrix[x, esc_y] in allkeys)] # left
         if (isempty(valid_x_1m) || maximum(valid_x_1m) < esc_x-1) # can move left
             maxmove = isempty(valid_x_1m) ? 1 : (maximum(valid_x_1m)+1)
+            valy = esc_y
             if strategy == 3 # prefer near rightside IO
                 for x in esc_x:-1:maxmove
-                    if directionclear(items, escorts, escortid, x, esc_y, 2, iteration)
+                    candheight = directionval(items, escorts, escortid, x, esc_y, 2, iteration,IO)
+                    if candheight < valy
                         maxmove = x
+                        valy = candheight
                         break
                     end
                 end
             else
                 for x in maxmove:esc_x # prefer far out
-                    if directionclear(items, escorts, escortid, x, esc_y, 2, iteration)
+                    candheight = directionval(items, escorts, escortid, x, esc_y, 2, iteration,IO)
+                    if candheight < valy
                         maxmove = x
+                        valy = candheight
                         break
                     end
                 end
@@ -1236,7 +1579,7 @@ function checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strat
         if (isempty(valid_y) || minimum(valid_y)-1 > esc_y) # can move up
             minup = isempty(valid_y) ? size(matrix, 2) : minimum(valid_y)-1 
             for y in esc_y:minup
-                if directionclear(items, escorts,escortid, esc_x,y, 1, iteration)
+                if directionclear(items, escorts,escortid, esc_x,y, 1, iteration,IO)
                     minup = y
                     break
                 end
@@ -1247,12 +1590,13 @@ function checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strat
         end
     end
     if diresc == -2 # lowest possible y
+        reach = 1 # reach is the left right checking reach in this case. 
         valid_y= [y for y in IO[2]:esc_y-1 if (blockmat[esc_x, y] == 1 || matrix[esc_x, y] in allkeys)] # up 
         if (isempty(valid_y) || maximum(valid_y)+1 < esc_y) # can move up
             range1 = isempty(valid_y) ? IO[2] : maximum(valid_y)+1
             maxdown = esc_y
             for y in range1:esc_y
-                if directionclear(items, escorts,escortid, esc_x,y, 1, iteration)
+                if directionclear(items, escorts,escortid, esc_x,y, 1, reach, iteration,IO)
                     maxdown = y
                     break
                 end
@@ -1268,19 +1612,17 @@ function checkmatrixforblock!(blockmat, matrix, maxmove, diresc, escortid, strat
     return maxmove
 
 end
-"""
-while we check where to move the escort so that we can make another move in the next iteration 
 
-    example: I want to move escort up as its blocked here. i want to check where up can i move so that i can move left/right in the next iteration
-"""
-function directionclear( items, escorts, escortid, coordx, coordy, direction, iteration)
+function directionval( items, escorts, escortid, coordx, coordy, direction, iteration,IO)
+    iox, ioy = IO
+    valy = 1 ; valx = 1
     allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
     if direction ==1 # we give y coord and tell to check 
         for entity in allkeys # check for presence in both collections in the front          
             if haskey(escorts, entity)
                 esc_other = escorts[entity]
                 if (esc_other.coords[2] == coordy && esc_other.lastmoved == iteration)  # iteration as escort will probably move
-                    if (esc_other.coords[1] < min(IO[1], coordx) || esc_other.coords[1] > max(IO[1], coordx)) # acceptable if on the other side of IO[1]
+                    if (esc_other.coords[1] < min(iox, coordx) || esc_other.coords[1] > max(iox, coordx)) # acceptable if on the other side of iox
                         continue
                     end
                     return false
@@ -1288,8 +1630,50 @@ function directionclear( items, escorts, escortid, coordx, coordy, direction, it
             elseif haskey(items, entity)
                 item_other = items[entity]
                 if item_other.coords[2] == coordy
-                    if (coordx == IO[1]) ||
-                        (coordx > min(item_other.coords[1], IO[1]) && coordx < max(item_other.coords[1], IO[1]))
+                    if (coordx == iox) ||
+                        (coordx > min(item_other.coords[1], iox) && coordx < max(item_other.coords[1], iox))
+                        println(" item:$(entity) can be served by escort:$escortid , shouldnt have happened unless path blocked after move")
+                        continue
+                    end
+                    return false
+                end
+            end
+        end
+        return valx
+    elseif direction ==2 # we give x coord and tell to check lower y, as we wish to not hurt anything
+        
+        for y in coordy:1
+            if matrix[coordx, y] in allkeys
+                valy = y
+            end
+        end
+        return valy
+    end
+    
+end
+"""
+while we check where to move the escort so that we can make another move in the next iteration 
+
+    example: I want to move escort up as its blocked here. i want to check where up can i move so that i can move left/right in the next iteration
+"""
+function directionclear( items, escorts, escortid, coordx, coordy, direction, iteration,IO)
+    iox, ioy = IO
+    allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
+    if direction ==1 # we give y coord and tell to check 
+        for entity in allkeys # check for presence in both collections in the front          
+            if haskey(escorts, entity)
+                esc_other = escorts[entity]
+                if (esc_other.coords[2] == coordy && esc_other.lastmoved == iteration)  # iteration as escort will probably move
+                    if (esc_other.coords[1] < min(iox, coordx) || esc_other.coords[1] > max(iox, coordx)) # acceptable if on the other side of iox
+                        continue
+                    end
+                    return false
+                end
+            elseif haskey(items, entity)
+                item_other = items[entity]
+                if item_other.coords[2] == coordy
+                    if (coordx == iox) ||
+                        (coordx > min(item_other.coords[1], iox) && coordx < max(item_other.coords[1], iox))
                         println(" item:$(entity) can be served by escort:$escortid , shouldnt have happened unless path blocked after move")
                         continue
                     end
@@ -1308,6 +1692,63 @@ function directionclear( items, escorts, escortid, coordx, coordy, direction, it
             elseif haskey(items, entity)
                 item_other = items[entity]
                 if item_other.coords[1] == coordx && item_other.coords[2] < coordy # TODO if a lower item exists this is not an issue
+                    return false
+                end
+            end
+        end
+    end
+    return true
+end
+
+function directionclear( items, escorts, escortid, coordx, coordy, direction, reach, iteration,IO)
+    iox, ioy = IO
+    dir = iox < coordx ? -1 : 1
+    dir = iox == coordx ? 0 : dir
+    allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
+    if direction ==1 # we give y coord and tell to check 
+        for entity in allkeys # check for presence in both collections in the front          
+            if haskey(escorts, entity)
+                esc_other = escorts[entity]
+                if (esc_other.coords[2] == coordy && esc_other.lastmoved == iteration)  # iteration as escort will probably move
+                    if (esc_other.coords[1] < min(iox, coordx) || esc_other.coords[1] > max(iox, coordx)) # acceptable if on the other side of iox
+                        continue
+                    elseif (esc_other.coords[1] >= (coordx - reach) && esc_other.coords[1] <= (coordx + reach))
+                        return false
+                    end
+                end
+            elseif haskey(items, entity)
+                item_other = items[entity]
+                if (
+                    item_other.coords[2] == coordy &&
+                    dir == -1 &&
+                    item_other.coords[1] >= (coordx - reach) &&
+                    item_other.coords[1] <= coordx
+                ) ||
+                (
+                    item_other.coords[2] == coordy &&
+                    dir == 1 &&
+                    item_other.coords[1] >= coordx &&
+                    item_other.coords[1] <= (coordx + reach)
+                )
+                    println("noreach")
+                    return false
+                end
+            end
+        end
+        
+    elseif direction ==2 # we give x coord and tell to check lower y, as we wish to not hurt anything
+        for entity in allkeys # check for presence in both collections in the front
+            if haskey(escorts, entity)
+                esc_other = escorts[entity]
+                if (esc_other.coords[1] == coordx  &&
+                     esc_other.coords[2] >=(coordy - reach) && esc_other.coords[2] <= (coordy))  # iteration as escort will probably move
+                    return false
+                end
+            elseif haskey(items, entity)
+                item_other = items[entity]
+                if item_other.coords[1] == coordx && 
+                    item_other.coords[2] >= coordy-reach &&
+                    item_other.coords[2] <= coordy + reach   # TODO if a lower item exists this is not an issue
                     return false
                 end
             end
@@ -1456,6 +1897,9 @@ function resetescorts!(escorts, iteration)
             if key < iteration-1
             delete!(escort.banset, key)
             end
+        end
+        while length(escort.tabu)>3
+            escort.tabu = escort.tabu[2:end]
         end
     end
 end

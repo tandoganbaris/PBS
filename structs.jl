@@ -22,10 +22,12 @@ mutable struct escort
     itemsy::Vector{String} # items served by y now
     lastmoved::Int64 # if the escort is fixed
     banset:: Dict{Int64, Vector{String}} # items that cannot be served by the escort
+    tabu::Vector{Tuple{Int64, Int64}} # tabu list
 end
 function createescort(id::String, coords::Tuple{Int64, Int64}, lastmoved::Int64= 0)
     itemsx = Vector{String}()
     itemsy = Vector{String}()
     banset = Dict{Int64, Vector{String}}()
-    return escort(id, coords, itemsx, itemsy, lastmoved, banset)
+    tabu = Vector{Tuple{Int64, Int64}}()
+    return escort(id, coords, itemsx, itemsy, lastmoved, banset, tabu)
 end
