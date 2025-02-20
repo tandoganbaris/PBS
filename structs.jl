@@ -4,16 +4,14 @@
 mutable struct item
     id::String # item id
     coords::Tuple{Int64, Int64} # x, y
-    escortsx::Vector{String} # escorts serving x now
-    escortsy::Vector{String} #escorts serving y now
+    escortssum::Int64 # escorts that can serve item
     direction::Int64 # 0: not move, 1: move in x, 2: move in y
     deadline:: Float64 # deadline for the item
 end
 function createitem(id::String, coords::Tuple{Int64, Int64}, deadline::Float64)
-    escortsx = Vector{String}()
-    escortsy = Vector{String}()
+    escorts= 0
     direction = 0
-    return item(id, coords, escortsx, escortsy, direction, deadline)
+    return item(id, coords, escorts, direction, deadline)
 end
 mutable struct escort
     id::String # escort id
