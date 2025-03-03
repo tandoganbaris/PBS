@@ -6,12 +6,14 @@ mutable struct item
     coords::Tuple{Int64, Int64} # x, y
     escortssum::Int64 # escorts that can serve item
     direction::Int64 # 0: not move, 1: move in x, 2: move in y
-    deadline:: Float64 # deadline for the item
+    deadline::Float64 # deadline for the item
+    tes::Int64 # time entered system
 end
 function createitem(id::String, coords::Tuple{Int64, Int64}, deadline::Float64)
     escorts= 0
     direction = 0
-    return item(id, coords, escorts, direction, deadline)
+    tes =0
+    return item(id, coords, escorts, direction, deadline,tes)
 end
 mutable struct escort
     id::String # escort id

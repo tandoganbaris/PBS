@@ -28,7 +28,8 @@ function plot_matrix(matrix, items, escorts, IO)
         ylims=(0.5, nrows + 0.5),
         aspect_ratio=:equal,
         legend=false,
-        colorbar=false
+        colorbar=false,
+        size=(60*ncols, 60*nrows)
     )
 
     # Draw grid lines
@@ -38,24 +39,38 @@ function plot_matrix(matrix, items, escorts, IO)
     for row in 1:nrows+1
         plot!(p, [0.5, ncols + 0.5], [row - 0.5, row - 0.5], color=:black, lw=1)
     end
-    
+    font_size = max(8, 20 - ncols ÷ 2)  # Example scaling
     # Annotate the cells
     for col in 1:ncols
         for row in 1:nrows
-            annotate!(p, col, row, text(matrix[col, row], :black, :center))
+            annotate!(p, col, row, text(matrix[col, row], :black, :center, font(font_size)))
         end
     end
 
     # Draw the IO square
-    c, r = IO
-    plot!(
-        p,
-        [c-0.5, c+0.5, c+0.5, c-0.5, c-0.5],
-        [r-0.5, r-0.5, r+0.5, r+0.5, r-0.5],
-        color=:green,
-        lw=5,
-        fill=false
-    )
+    if isa(IO, Tuple)
+        c, r = IO
+        plot!(
+            p,
+            [c-0.5, c+0.5, c+0.5, c-0.5, c-0.5],
+            [r-0.5, r-0.5, r+0.5, r+0.5, r-0.5],
+            color=:green,
+            lw=5,
+            fill=false
+        )
+    elseif isa(IO, Array{Tuple})
+        for io in IO
+            c, r = io
+            plot!(
+                p,
+                [c-0.5, c+0.5, c+0.5, c-0.5, c-0.5],
+                [r-0.5, r-0.5, r+0.5, r+0.5, r-0.5],
+                color=:green,
+                lw=5,
+                fill=false
+            )
+        end
+    end
     
     return p
 end
