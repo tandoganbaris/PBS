@@ -237,8 +237,8 @@ function main(initialstate, items, escorts, IO, testid, save_directory)
             changeitems!(batch,itemstopick, time,  IO)
         end
         #assign escorts for items unique
-        #PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
-        PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
+        PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
+        #PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
        
 
         save_plot(saveplot, incumbentstate, batch, escorts, IO, "$(testid)_$(time)_test", save_directory)
@@ -279,10 +279,10 @@ function checkmatchange_main(matrix1, matrix2)
     return false
 end
 
-#=
+
 global makespan_sum = 0
 global average_time_sum = 0
-num_iterations = 1000
+num_iterations = 3000
 timerstart = time()
 for i in 1:num_iterations
     if i ==263
@@ -322,4 +322,5 @@ average_of_average_time = average_time_sum / num_iterations
 println("Time elapsed: ", timerstop - timerstart)
 println("Average of makespan: ", average_makespan)
 println("Avg of Avg times: ", average_of_average_time)
-=#
+
+
