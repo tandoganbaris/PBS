@@ -208,13 +208,14 @@ function main(initialstate, items, escorts, IO, testid, save_directory)
     itemstopick = deepcopy(items)
     local incumbentstate = deepcopy(initialstate)
     makespandict = Dict{String, Int64}()
-    n= 3 # batch size
+    n= 4 # batch size
     r = 1 # replenishment size
-    time = 0
+    time = 1
     batch = Dict{String, Any}()
     local batch = createbatch!(batch, allitems,itemstopick, incumbentstate, time, n, IO)
     stalematecheck = true ; shuffletrigger= false
     while !(isempty(itemstopick)&&isempty(batch))
+
         prevstate = deepcopy(incumbentstate) #remove this
         if stalematecheck 
             prevstate = deepcopy(incumbentstate)
@@ -240,7 +241,6 @@ function main(initialstate, items, escorts, IO, testid, save_directory)
         PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
         #PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
        
-
         save_plot(saveplot, incumbentstate, batch, escorts, IO, "$(testid)_$(time)_test", save_directory)
         time +=1
         if stalematecheck
@@ -250,11 +250,11 @@ function main(initialstate, items, escorts, IO, testid, save_directory)
                 stalematecheck = false
             end
         end
-        if time >1000 || (time ==30 && incumbentstate == initialstate)
+        if time >1000 
             break
         end
     end
-    return incumbentstate, makespandict, time
+    return incumbentstate, makespandict, time-1
 end
 function checksync_main(matrix, escorts, items)
     for eid in keys(escorts)
@@ -279,20 +279,20 @@ function checkmatchange_main(matrix1, matrix2)
     return false
 end
 
-
+#=
 global makespan_sum = 0
 global average_time_sum = 0
-num_iterations = 3000
+num_iterations = 100
 timerstart = time()
 for i in 1:num_iterations
     if i ==263
-        global saveplot = false
+        global saveplot = true
     else
-        global saveplot = false
+        global saveplot = true
     end
     item_deadlines = Dict("$i" => Float64(1000 - i * 10) for i in 1:20) 
     #item_deadlines = Dict("$i" => Float64(20 + (i - 1) * 10) for i in 1:10)
-    IO= (5,1)
+    IO= (1,1)
     initialstate, items, escorts = randomintialstate((10, 10), 4, item_deadlines, rng)
     save_directory = raw"C:\codestuff\PBS\plots\\"
     save_plot(saveplot, initialstate, items, escorts, IO, "$(0)_test", save_directory)
@@ -322,5 +322,5 @@ average_of_average_time = average_time_sum / num_iterations
 println("Time elapsed: ", timerstop - timerstart)
 println("Average of makespan: ", average_makespan)
 println("Avg of Avg times: ", average_of_average_time)
-
+=#
 

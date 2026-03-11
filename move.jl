@@ -820,7 +820,7 @@ function outwards_astar_with_dirchange(matrix, IO, blockmat, escortid, escorts, 
         combined_astar_matrices = zeros(Float64, rows, cols, num_io)
         for i in 1:num_io
             io = IO[i]
-            worked, asternmat = ooutwards_astar_with_dirchange(matrix, IO, blockmat, escortid, escorts, items, distval=0.01)
+            worked, asternmat = outwards_astar_with_dirchange(matrix, IO, blockmat, escortid, escorts, items, distval=0.01)
             if worked
                 combined_astar_matrices[:, :, i] = asternmat
             end
@@ -950,7 +950,7 @@ moves all escorts, starting with the mover escorts
 """
 function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockmat, IO)
 # MOVERS FIRST
-    
+
     iox, ioy = IO
     #if iteration == 5
     #    println("here")
@@ -1134,11 +1134,9 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
 end
 function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, blockmat, IO)
     # MOVERS FIRST
-       
+   
     iox, ioy = IO
-    #if iteration == 2
-    #    println("here")
-    #end
+    
     serveditems = []
     checkpathformovers = false
     esccoords = [(escorts[key].coords[1], escorts[key].coords[2]) for key in moverescortids]
@@ -1305,12 +1303,23 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
         end
     end
     nonmovers = setdiff(nonmovers, usedescorts)
-    for escortid in nonmovers
+    smart = zeros(Int, length(nonmovers))
+    if length(nonmovers) > length(keys(items))
+        gap = length(nonmovers) - length(keys(items))
+        for i in 1:gap
+            smart[i] = 1
+        end
+    end
+    for (index,escortid) in enumerate(nonmovers)
         esc_x , esc_y = escorts[escortid].coords
         if blockmat[esc_x, esc_y] == 1
             continue
         end
-        moved, escort_finalcoords = freeroam!(iteration, matrix, items, escorts, escortid, blockmat, IO)
+        if smart[index] ==1 
+            moved, escort_finalcoords = freeroam_dumb!(iteration, matrix, items, escorts, escortid, blockmat, IO)
+        else
+            moved, escort_finalcoords = freeroam!(iteration, matrix, items, escorts, escortid, blockmat, IO)
+        end
         if moved && escort_finalcoords != (esc_x,esc_y)
             push!(escorts[escortid].tabu, (esc_x,esc_y))
             move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
@@ -2657,7 +2666,8 @@ end
 function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts, blockmat, IO)
     thisescort = escorts[escortid]
     esc_x, esc_y = thisescort.coords
-
+    
+    allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
     # Get coordinates of escorts that have not moved this iteration and are not this escort
     other_escorts_coords = [(escorts[esc].coords[1], escorts[esc].coords[2]) for esc in keys(escorts) if esc != escortid]
    
@@ -2697,14 +2707,14 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
 
                
                 for y in ymin:ymax
-                    if blockmat[esc_x, y] == 1 || matrix[esc_x, y] in keys(items)
+                    if blockmat[esc_x, y] == 1 || matrix[esc_x, y] in allkeys
                         path_blocked = true
                         break
                     end
                 end
                 if IO[1] > min(itemx, esc_x) && IO[1] < max(itemx, esc_x) # can serve but effects badly 
                     for x in min(esc_x, IO[1]):max(esc_x, IO[1])
-                        if matrix[x, itemy] in keys(items) 
+                        if matrix[x, itemy] in allkeys 
                             path_blocked = true
                             break
                         end
@@ -2746,7 +2756,7 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
                 xmin = min(esc_x, itemx)
                 xmax = max(esc_x, itemx)
                 for x in xmin:xmax
-                    if blockmat[x, esc_y] == 1 || matrix[x, esc_y] in keys(items)
+                    if blockmat[x, esc_y] == 1 || matrix[x, esc_y] in allkeys
                         path_blocked = true
                         break
                     end
@@ -2816,14 +2826,14 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
 
                
                 for y in ymin:ymax
-                    if blockmat[esc_x, y] == 1 || matrix[esc_x, y] in keys(items)
+                    if blockmat[esc_x, y] == 1 || matrix[esc_x, y] in allkeys
                         path_blocked = true
                         break
                     end
                 end
                 if IO[1] > min(itemx, esc_x) && IO[1] < max(itemx, esc_x) # can serve but effects badly 
                     for x in min(esc_x, IO[1]):max(esc_x, IO[1])
-                        if matrix[x, itemy] in keys(items) 
+                        if matrix[x, itemy] in allkeys 
                             path_blocked = true
                             break
                         end
@@ -2865,7 +2875,7 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
                 xmin = min(esc_x, itemx)
                 xmax = max(esc_x, itemx)
                 for x in xmin:xmax
-                    if blockmat[x, esc_y] == 1 || matrix[x, esc_y] in keys(items)
+                    if blockmat[x, esc_y] == 1 || matrix[x, esc_y] in allkeys
                         path_blocked = true
                         break
                     end
@@ -3235,7 +3245,7 @@ function freeroam!(iteration, matrix, items, escorts, escortid, blockmat, IO)
                 end
             end                
         else # io on the left
-            maxmove_x = maxmove_x = checkasternmat( blockmat, matrix, -1, escortid, strategy, escorts, items,IO, asternmat)
+            maxmove_x = checkasternmat( blockmat, matrix, -1, escortid, strategy, escorts, items,IO, asternmat)
             if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts) || (maxmove_x, esc_y) in thisescort.tabu 
                 minup = asternmat[esc_x,esc_y+1] != Inf ? checkasternmat(blockmat, matrix, 2, escortid, strategy, escorts, items,IO, asternmat) :
                     checkmatrixforblock!(blockmat, matrix, 2, escortid, strategy, iteration, escorts, items,IO)
@@ -3255,6 +3265,127 @@ function freeroam!(iteration, matrix, items, escorts, escortid, blockmat, IO)
         dirx= avg_x <= IO[1] ? 1 : -1 # try go to the opposite direction of the items to be able to serve them
         iodir = dirx
         maxmove_y = checkasternmat(blockmat, matrix, -2, escortid, strategy, escorts, items,IO, asternmat)#checkmatrixforblock!(blockmat, matrix, 1, -2, escortid, strategy, iteration, escorts, items,IO)
+        if (maxmove_y == esc_y) || matrix[esc_x, maxmove_y ] in keys(escorts) || (esc_x, maxmove_y) in thisescort.tabu# cannot move down enough , move out of the way right or left 
+            for _ in 1:2 
+                if dirx == 1 # chose right
+                    maxmove = iodir == dirx ?  # if asternmat can be used we use it
+                            checkasternmat( blockmat, matrix, dirx, escortid, strategy, escorts, items,IO, asternmat) :
+                            checkmatrixforblock!(blockmat, matrix, dirx, escortid, strategy, iteration, escorts, items,IO)
+                    if maxmove > esc_x && !(matrix[maxmove, esc_y] in keys(escorts)) && !((maxmove, esc_y) in thisescort.tabu) # can move right
+                        return true, (maxmove, esc_y)
+                    end
+                elseif dirx == -1 # chose left
+                    maxmove = iodir == dirx ? 
+                            checkasternmat( blockmat, matrix, dirx, escortid, strategy, escorts, items,IO, asternmat) :
+                            checkmatrixforblock!(blockmat, matrix, dirx, escortid, strategy, iteration, escorts, items,IO)
+                    if (maxmove < esc_x && !(matrix[maxmove, esc_y] in keys(escorts))) && !((maxmove, esc_y) in thisescort.tabu) # can move left
+                        return true, (maxmove, esc_y)
+                    end
+                end
+                dirx = -dirx
+            end
+        else # can go down
+            return true, (esc_x, maxmove_y)
+        end
+        if moveitnow # must move so we try up
+            minup = checkmatrixforblock!(blockmat, matrix, 2, escortid, strategy, iteration, escorts, items,IO)
+            if minup > esc_y
+                return true,(esc_x, minup)
+            end
+        end
+        
+    end
+    
+    return false , (esc_x, esc_y ) # cannot move
+end
+function freeroam_dumb!(iteration, matrix, items, escorts, escortid, blockmat, IO)
+    strategy = IO[1] == 1 ? 1 : IO[1] == size(matrix, 1) ? 3 : 2 # 1: left, 2: middle, 3: right
+    
+    thisescort = escorts[escortid]
+    esc_x, esc_y = thisescort.coords
+    avgesc_x = length(keys(escorts)) > 1 ? mean([escorts[esc].coords[1] for esc in keys(escorts) if esc != escortid]) : esc_x
+    if strategy ==2 && avgesc_x<IO[1]
+        strategy = 3 # if most escorts are on the left we prefer staying as right as possible while moving left
+    elseif strategy ==2 && avgesc_x>IO[1]
+        strategy = 1# if most escorts are on the right we prefer staying as left as possible while moving right
+    end
+    moveitnow = false
+    if escorts[escortid].lastmoved <= iteration-2 
+        moveitnow = true
+    end
+  
+    # FREE ROAM; GO SOMEWHERE ELSE/FREE IF POSSIBLE
+    
+    worked, asternmat = outwards_astar_with_dirchange(matrix, IO, blockmat,escortid,escorts,items)
+    if esc_x == IO[1] && esc_y == IO[2]
+        return true, (esc_x, esc_y) # best place it could be 
+    elseif esc_x == IO[1] # down, outwards, 
+        maxmove_y = checkasternmat(blockmat, matrix, -2, escortid, strategy, escorts, items,IO, asternmat)
+        if (maxmove_y == esc_y) || matrix[esc_x, maxmove_y ] in keys(escorts) || (esc_x, maxmove_y) in thisescort.tabu #cannot move down enough , move out of the way right or left 
+            avg_x = mean([items[item].coords[1] for item in keys(items)]) # where are the items ? 
+            diresc= avg_x <= IO[1] ? 1 : -1 # if items are left we go right, vice versa
+            for _ in 1:2 # Try both directions if the first choice fails
+                if diresc == 1 || IO[1] ==1 # chose right
+                    maxmove = size(matrix, 1)
+                    maxmove = checkmatrixforblock!(blockmat, matrix, diresc, escortid, strategy, iteration, escorts, items, IO)
+                    if (maxmove > esc_x && !(matrix[maxmove, esc_y] in keys(escorts)))&& !((maxmove, esc_y) in thisescort.tabu) # can move right
+                        return true, (maxmove, esc_y)
+                    end
+                elseif diresc == -1 || IO[1] == size(matrix,1)# chose left
+                    maxmove = 1
+                    maxmove = checkmatrixforblock!(blockmat, matrix, diresc, escortid, strategy, iteration, escorts, items,IO)
+                    if (maxmove < esc_x && !(matrix[maxmove, esc_y] in keys(escorts)))&& !((maxmove, esc_y) in thisescort.tabu) # can move left
+                        return true, (maxmove, esc_y)
+                    end
+                end
+                diresc = -diresc # Switch direction
+            end 
+            if moveitnow # side is also blocked. so now we couldnt move down or sideways
+                minup = checkmatrixforblock!(blockmat, matrix, 2, escortid, strategy, iteration, escorts, items,IO)
+                if minup > esc_y
+                    return true, (esc_x, minup)
+                end
+            end
+
+        else
+            return true, (esc_x, maxmove_y)
+        end
+    elseif esc_y == IO[2] # go in X direction towards IO , if blocked go up, if must move go outwards 
+        if esc_x < IO[1] # io on the right
+            maxmove_x = checkasternmat( blockmat, matrix, 1, escortid, strategy, escorts, items,IO, asternmat)
+            if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts) || (maxmove_x, esc_y) in thisescort.tabu 
+                minup = asternmat[esc_x,esc_y+1] != Inf ? checkasternmat(blockmat, matrix, 2, escortid, strategy, escorts, items,IO, asternmat) :
+                    checkmatrixforblock!(blockmat, matrix, 2, escortid, strategy, iteration, escorts, items,IO)
+                if minup > esc_y
+                    return true, (esc_x, minup)
+                elseif moveitnow 
+                    maxmove_x = checkasternmat( blockmat, matrix, -1, escortid, strategy, escorts, items,IO, asternmat)
+                    if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts) || (maxmove_x, esc_y) in thisescort.tabu 
+                        return true, (maxmove_x, esc_y)
+                    end
+                end
+            end                
+        else # io on the left
+            maxmove_x = checkasternmat( blockmat, matrix, -1, escortid, strategy, escorts, items,IO, asternmat)
+            if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts) || (maxmove_x, esc_y) in thisescort.tabu 
+                minup = asternmat[esc_x,esc_y+1] != Inf ? checkasternmat(blockmat, matrix, 2, escortid, strategy, escorts, items,IO, asternmat) :
+                    checkmatrixforblock!(blockmat, matrix, 2, escortid, strategy, iteration, escorts, items,IO)
+                if minup > esc_y
+                    return true, (esc_x, minup)
+                elseif moveitnow 
+                    maxmove_x = checkasternmat( blockmat, matrix, 1, escortid, strategy, escorts, items,IO, asternmat)
+                    if maxmove_x == esc_x || matrix[maxmove_x, esc_y] in keys(escorts) || (maxmove_x, esc_y) in thisescort.tabu 
+                        return true,(maxmove_x, esc_y)
+                    end
+                end
+            end     
+        end  
+        return true, (maxmove_x, esc_y)
+    else # not at IO coords # down, inwards, upwards, outwards
+        avg_x = mean([items[item].coords[1] for item in keys(items)])
+        dirx= avg_x <= IO[1] ? 1 : -1 # try go to the opposite direction of the items to be able to serve them
+        iodir = dirx
+        maxmove_y = checkmatrixforblock!(blockmat, matrix, -2, escortid, strategy, iteration, escorts, items,IO)#checkmatrixforblock!(blockmat, matrix, 1, -2, escortid, strategy, iteration, escorts, items,IO)
         if (maxmove_y == esc_y) || matrix[esc_x, maxmove_y ] in keys(escorts) || (esc_x, maxmove_y) in thisescort.tabu# cannot move down enough , move out of the way right or left 
             for _ in 1:2 
                 if dirx == 1 # chose right
@@ -3476,7 +3607,7 @@ function checkmatrixforblock!(blockmat, matrix, diresc, escortid, strategy, iter
         end
     end
     if diresc == -2 # lowest possible y
-        reach = 1 # reach is the left right checking reach in this case. 
+        reach = 2 # reach is the left right checking reach in this case. 
         valid_y= [y for y in IO[2]:esc_y-1 if (blockmat[esc_x, y] == 1 || matrix[esc_x, y] in allkeys)] # up 
         if (isempty(valid_y) || maximum(valid_y)+1 < esc_y) # can move up
             range1 = isempty(valid_y) ? IO[2] : maximum(valid_y)+1
@@ -3617,7 +3748,7 @@ function directionclear( items, escorts, escortid, coordx, coordy, direction, re
                     item_other.coords[1] >= coordx &&
                     item_other.coords[1] <= (coordx + reach)
                 )
-                    println("noreach")
+                    
                     return false
                 end
             end
