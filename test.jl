@@ -25,9 +25,12 @@ end
 @testset "CSV Rows" begin
     df = CSV.read(raw"C:\codestuff\PBS\bm_4l_10x10_1IO.csv", DataFrame)
 
+    rename!(df, strip.(names(df)))
+
     # Arrays to store heuristics
     makespan_heuristics = Float64[]
     average_dict_heuristics = Float64[]
+    
 
     for row in eachrow(df)
         # Parse ID for folder name
@@ -59,7 +62,7 @@ end
         # Build items
         items = Dict{String, Any}()
         for (k, coord) in enumerate(item_coords)
-            items["I$k"] = item("I$k", coord, 0, 0, 1000.0, 1)
+            items["I$k"] = item("I$k", coord, 0, 0, 1000.0, 1, nothing)
         end
 
         # Example placeholder matrix
@@ -77,14 +80,15 @@ end
             initialstate[x, y] = key
         end
       
-            global saveplot = true 
+            global saveplot = true
+
         
         
         finalstate, makespandict, makespan = main(
             initialstate, items, escorts,
-            IO_coords[1],
+            IO_coords,
             1,
-            folder_path  # pass the new folder path to main
+            folder_path, n=2  # pass the new folder path and batch size to main
         )
 
         # 1) The makespan from your algorithm
@@ -101,5 +105,5 @@ end
     df[!, :flowtime_heuristic] = average_dict_heuristics
 
     # Write updated CSV
-    CSV.write(raw"C:\codestuff\PBS\outputtest.csv", df)
+    CSV.write(raw"C:\codestuff\PBS\outputtestn2.csv", df)
 end

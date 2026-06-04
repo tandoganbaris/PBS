@@ -7,24 +7,288 @@ function PBSengine!(iteration, incumbentstate, batch, escorts, IO;obj="makespan"
      #assign escorts for items unique
     if obj == "makespan"
         if isa(IO, Tuple)
+            moved_any = false
             moverescortids, blockmat = item_escort_assigment!(incumbentstate, batch, escorts, iteration, IO) 
-            moveescorts!(iteration, incumbentstate, batch, escorts, moverescortids, blockmat, IO)
-        elseif isa(IO, Array{Tuple})
-            # Handle the case where IO is an array of tuples
+            moved_any = moveescorts!(iteration, incumbentstate, batch, escorts, moverescortids, blockmat, IO)
+            return moved_any
+        elseif isa(IO, Vector{Tuple{Int,Int}})
+            (io_blockmats, global_blockmat, global_escort_items, item_to_ios) = item_escort_IO_assigment!(incumbentstate, batch, escorts, iteration, IO) 
+            moved_any = moveescorts_flow_multi_io!(iteration, incumbentstate, batch, escorts, 
+                           io_blockmats, global_blockmat, global_escort_items,IO, item_to_ios)
+            return moved_any
         else
-            throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Array{Tuple}"))
+            throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Vector{Tuple{Int,Int}}"))
         end
     elseif obj == "flowtime"
         if isa(IO, Tuple)
+            moved_any = false
             moverescortids, blockmat = item_escort_assigment!(incumbentstate, batch, escorts, iteration, IO) 
-            moveescorts_flow!(iteration, incumbentstate, batch, escorts, moverescortids, blockmat, IO)
-        elseif isa(IO, Array{Tuple})
+            moved_any = moveescorts_flow!(iteration, incumbentstate, batch, escorts, moverescortids, blockmat, IO)
+            return moved_any
+        elseif isa(IO, Vector{Tuple{Int,Int}})
+               (io_blockmats, global_blockmat, global_escort_items, item_to_ios) = item_escort_IO_assigment!(incumbentstate, batch, escorts, iteration, IO) 
+            moved_any = moveescorts_flow_multi_io!(iteration, incumbentstate, batch, escorts, 
+                           io_blockmats, global_blockmat, global_escort_items,IO, item_to_ios)
+            return moved_any
             # Handle the case where IO is an array of tuples
         else
-            throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Array{Tuple}"))
+            throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Vector{Tuple{Int,Int}}"))
         end
     end   
 end
+
+function item_IO_assignment(item, IO)
+    if isa(IO, Tuple)
+        item.assigned_io = IO
+    elseif isa(IO, Vector{Tuple{Int,Int}})
+        item.assigned_io = IO
+    else
+        throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Vector{Tuple{Int,Int}}"))
+    end
+end
+
+
+function item_escort_IO_assigment!(matrix, items, escorts, iteration, IO)
+    # Handle multi-IO case: create separate assignments for each IO
+    if isa(IO, Vector{Tuple{Int,Int}})
+        io_assignments = Dict()  # Will store: IO => (escortstomovefirst, blockmat, itemescortdict)
+        
+        resetescorts!(escorts, iteration)  # Reset escorts once for all IOs
+        
+        # Pre-process: determine which IOs are relevant for each item
+        item_to_ios = Dict{String, Vector{Tuple}}()  # item_id => [primary_io, secondary_io (if any)]
+        
+        for item_id in keys(items)
+            item_x, item_y = items[item_id].coords
+            
+            # Calculate distances to all IOs
+            io_distances = [(io, euclidean_distance((item_x, item_y), io)) for io in IO]
+            sort!(io_distances, by = x -> x[2])  # Sort by distance
+            
+            # Keep at most 2 closest IOs, with x-coordinate filtering
+            relevant_ios = []
+            for (i, (io, dist)) in enumerate(io_distances[1:min(2, length(io_distances))])
+                io_x, io_y = io
+                should_consider = true
+                
+                # X-coordinate alignment check
+                if i == 1
+                    # Always consider the closest IO
+                    push!(relevant_ios, io)
+                else
+                    # For secondary IO, check x-coordinate alignment
+                    primary_io_x, _ = io_distances[1][1]
+                    
+                    # Don't consider secondary IO if item is not between/beyond the IOs
+                    if (item_x < min(primary_io_x, io_x)) || (item_x > max(primary_io_x, io_x))
+                        # Item is on one side, only one IO is relevant
+                        if item_x < min(primary_io_x, io_x)
+                            # Item is to the left, keep the leftmost IO (already primary)
+                            should_consider = false
+                        elseif item_x > max(primary_io_x, io_x)
+                            # Item is to the right, replace primary with rightmost if primary is not rightmost
+                            if primary_io_x > io_x
+                                should_consider = false
+                            else
+                                # Primary is leftmost, secondary is rightmost - keep both logic
+                                push!(relevant_ios, io)
+                                should_consider = false
+                            end
+                        end
+                    else
+                        # Item is between or near both IOs
+                        x_gap = abs(primary_io_x - io_x)
+                        x_to_primary = abs(item_x - primary_io_x)
+                        x_to_secondary = abs(item_x - io_x)
+                        
+                        # Check if we already have a secondary IO; if current candidate is closer, replace it
+                        if length(relevant_ios) > 1
+                            existing_io = relevant_ios[2]
+                            existing_io_x, _ = existing_io
+                            
+                            # If current candidate is closer to item than existing secondary, replace it
+                            if x_to_secondary < abs(item_x - existing_io_x)
+                                # Replace the secondary IO with the closer one
+                                relevant_ios[2] = io
+                            end
+                            should_consider = false  # Don't push again, we either replaced or skipped
+                        else
+                            # No secondary IO yet, decide if we should add this one
+                            if x_to_secondary < x_gap *0.3
+                                should_consider = true
+                            else
+                                # Large gap: only consider if secondary is significantly closer
+                                should_consider = x_to_secondary < x_to_primary
+                            end
+                        end
+                    end
+                    
+                    if should_consider
+                        push!(relevant_ios, io)
+                    end
+                end
+            end
+            
+            if !isempty(relevant_ios)
+                item_to_ios[item_id] = relevant_ios
+            end
+        end
+        
+        for io in IO
+            # Only process items relevant to this IO
+            relevant_items = [item_id for item_id in keys(items) if haskey(item_to_ios, item_id) && io in item_to_ios[item_id]]
+            
+            if isempty(relevant_items)
+                # No relevant items for this IO, skip
+                io_assignments[io] = ([0 for _ in 1:size(matrix, 1), _ in 1:size(matrix, 2)], Dict())
+                continue
+            end
+            
+            io_x, io_y = io
+            sorted_keys = sort_keys_by_distance_and_sum(items, io, relevant_items)
+            
+            # For each IO, create independent escort availability
+            availableescorts = deepcopy(collect(keys(escorts)))
+            itemescortdict = Dict{String, Tuple{Vector{String}, Vector{String}}}()
+            blockmat = [0 for _ in 1:size(matrix, 1), _ in 1:size(matrix, 2)]
+            escort_items_dict = Dict{String, Tuple{Vector{String}, Vector{String}}}()  # Save assignments per IO
+            
+            updateitemescorts!(itemescortdict, items, sorted_keys, escorts, availableescorts, blockmat, iteration, io)
+            
+            # Assignment loop for this specific IO - use stable iteration
+            remaining_keys = deepcopy(sorted_keys)
+            for key in deepcopy(sorted_keys)
+                item = items[key]
+                escortsx = itemescortdict[key][1]
+                escortsy = itemescortdict[key][2]
+                x , y = items[key].coords    
+                filter!(x -> x != key, remaining_keys) # remove this item from remaining
+                
+                if (length(escortsx) == 0 && length(escortsy) == 0)
+                    item.direction = 0 # not move               
+                    continue
+                end
+                
+                escortid = 0  # Track the escort assigned
+                
+                if length(escortsx) == 0 && length(escortsy) > 0
+                    item.direction = 2 # move in y
+                    escortid = find_nearest_escort_multi_io(key, items, remaining_keys, matrix, io, blockmat, 2, escorts, escortsx, escortsy, iteration, IO, item_to_ios)
+                    if escortid == 0
+                        itemescortdict[key] = (itemescortdict[key][1], Vector{String}())
+                        continue
+                    else
+                        updateblockmat!(blockmat, item, escorts[escortid])
+                        filter!(x -> x != escortid, availableescorts)
+                        updateitemescortslight!(itemescortdict, items, remaining_keys, escorts, availableescorts, blockmat, iteration, io)
+                    end
+                
+                elseif length(escortsy) == 0 && length(escortsx) > 0
+                    item.direction = 1
+                    escortid = find_nearest_escort_multi_io(key, items, remaining_keys, matrix, io, blockmat, 1, escorts, escortsx, escortsy, iteration, IO, item_to_ios)
+                    if escortid == 0
+                        itemescortdict[key] = (Vector{String}(), itemescortdict[key][2])
+                        continue
+                    else
+                        updateblockmat!(blockmat, item, escorts[escortid])
+                        filter!(x -> x != escortid, availableescorts)
+                        updateitemescortslight!(itemescortdict, items, remaining_keys, escorts, availableescorts, blockmat, iteration, io)
+                    end
+                
+                elseif length(escortsx) > 0 && length(escortsy) > 0 # prefer x direction
+                    preferred_dir = length(escortsx) > length(escortsy) ? 1 : 2
+                    secondary_dir = preferred_dir == 1 ? 2 : 1
+                    item.direction = preferred_dir
+                    escortid = find_nearest_escort_multi_io(key, items, remaining_keys, matrix, io, blockmat, preferred_dir, escorts, escortsx, escortsy, iteration, IO, item_to_ios)
+                    if escortid == 0
+                        escortid = find_nearest_escort_multi_io(key, items, remaining_keys, matrix, io, blockmat, secondary_dir, escorts, escortsx, escortsy, iteration, IO, item_to_ios)
+                        if escortid == 0
+                            continue
+                        else
+                            item.direction = secondary_dir
+                            updateblockmat!(blockmat, item, escorts[escortid])
+                            filter!(x -> x != escortid, availableescorts)
+                            updateitemescortslight!(itemescortdict, items, remaining_keys, escorts, availableescorts, blockmat, iteration, io)
+                        end
+                    else
+                        updateblockmat!(blockmat, item, escorts[escortid])
+                        filter!(x -> x != escortid, availableescorts)
+                        updateitemescortslight!(itemescortdict, items, remaining_keys, escorts, availableescorts, blockmat, iteration, io)
+                    end
+                end
+                
+                # Final assignment if escortid is not 0 - save to escort_items_dict instead of modifying escorts directly
+                if escortid != 0
+                    if item.direction == 2
+                        # Save itemsy assignment for this IO
+                        if !haskey(escort_items_dict, escortid)
+                            escort_items_dict[escortid] = (Vector{String}(), Vector{String}())
+                        end
+                        escort_items_dict[escortid] = (escort_items_dict[escortid][1], [key])
+                    elseif item.direction == 1
+                        # Save itemsx assignment for this IO
+                        if !haskey(escort_items_dict, escortid)
+                            escort_items_dict[escortid] = (Vector{String}(), Vector{String}())
+                        end
+                        escort_items_dict[escortid] = ([key], escort_items_dict[escortid][2])
+                    end
+                end
+
+                # Clean up itemescortdict for items no longer being processed
+                for rm_key in setdiff(collect(keys(itemescortdict)), remaining_keys)
+                    delete!(itemescortdict, rm_key)
+                end
+                if all((length(itemescortdict[key][1]) + length(itemescortdict[key][2])) == 0 for key in keys(itemescortdict))
+                    break
+                end
+            end
+            
+            # Store this IO's assignments: blockmat and escort-item mappings
+            io_assignments[io] = (blockmat, escort_items_dict)
+        end
+        
+        # Prepare global structures for the next phase of assignment
+        # Merge blockmats and build global blockmat
+        global_blockmat = [0 for _ in 1:size(matrix, 1), _ in 1:size(matrix, 2)]
+        io_blockmats = Dict()
+        # Structure: escort_id => [(io, itemsx, itemsy), ...] to preserve which IO each assignment is for
+        global_escort_items = Dict{String, Vector{Tuple{Tuple, Vector{String}, Vector{String}}}}()
+        
+        for io in IO
+            if haskey(io_assignments, io)
+                blockmat, escort_items_dict = io_assignments[io]
+                io_blockmats[io] = blockmat
+                
+                # Merge into global blockmat (1 if assigned in any IO)
+                for i in 1:size(global_blockmat, 1), j in 1:size(global_blockmat, 2)
+                    if blockmat[i, j] == 1
+                        global_blockmat[i, j] = 1
+                    end
+                end
+                
+                # Merge escort assignments globally, preserving the IO information
+                for (escort_id, (itemsx, itemsy)) in escort_items_dict
+                    if !haskey(global_escort_items, escort_id)
+                        global_escort_items[escort_id] = []
+                    end
+                    # Store: (io, itemsx, itemsy) so we know which IO these items belong to
+                    push!(global_escort_items[escort_id], (io, itemsx, itemsy))
+                end
+            end
+        end
+        
+        # Return all data needed for intelligent multi-IO assignment:
+        # - io_blockmats: individual blockmat for each IO (for IO-specific decisions)
+        # - global_blockmat: merged blockmat across all IOs (for global conflict detection)
+        # - global_escort_items: which escorts are already assigned, to what items, and for which IO
+        # - item_to_ios: which IOs each item can use (for fallback logic)
+        return (io_blockmats, global_blockmat, global_escort_items, item_to_ios)
+
+    else
+        throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Vector{Tuple{Int,Int}}"))
+    end
+end
+
 function item_escort_assigment!(matrix, items, escorts, iteration, IO) 
     #save_item_escorts!(matrix, items, escorts, IO)
     io_x, io_y = IO
@@ -37,7 +301,7 @@ function item_escort_assigment!(matrix, items, escorts, iteration, IO)
     blockmat = [0 for _ in 1:size(matrix, 1), _ in 1:size(matrix, 2)]
     updateitemescorts!(itemescortdict, items, sorted_keys, escorts, availableescorts, blockmat, iteration, IO)
       
-    for key in sorted_keys
+    for key in deepcopy(sorted_keys)
         item = items[key]
         escortsx = itemescortdict[key][1]
         escortsy = itemescortdict[key][2]
@@ -195,8 +459,13 @@ end
 """
 sorting function. currently by decreasing distance and then increasing number of escorts. (furthest away item is first)
 """
-function sort_keys_by_distance_and_sum(items, IO)
-    sorted_keys = sort(collect(deepcopy(keys(items))), by = x -> (
+function sort_keys_by_distance_and_sum(items, IO, relevant_items=nothing)
+    if relevant_items === nothing
+        keys_to_sort = collect(keys(items))
+    else
+        keys_to_sort = intersect(relevant_items, collect(keys(items)))
+    end
+    sorted_keys = sort(keys_to_sort, by = x -> (
         -euclidean_distance(items[x].coords, IO),  # Negative Euclidean distance for decreasing order
         items[x].escortssum  # Sum of lengths for increasing order
     ))
@@ -310,6 +579,269 @@ end
 Given everything it finds the nearest escort to item. checks the path, if another item can be servd it serves it too.
 
 """
+#=
+# Multi-IO Find Nearest Escort Function - Logic Explanation
+
+An escort should NOT be assigned to an item if:
+
+1. **The escort is "too far out"**: The escort lies beyond another IO (from current IO perspective) that has unassigned items needing to move in the same direction
+   - Example: `item1, io1, io2, escort, item2`
+   - item1 moves toward io1, item2 moves toward io2
+   - Escort is beyond io2 - should serve item2 for io2, not item1 for io1
+
+2. **Multiple items same direction**: There are other unassigned items that also need to move in the same direction toward the same IO
+   - Example: `item1, io1, item2, io2, escort`
+   - Both items move right toward their respective IOs
+   - Escort should wait to serve both (or the one further out first to maintain furthest-first principle)
+
+
+# Algorithm Steps
+
+
+# Step 2: Check escort distance vs other IOs
+For each candidate escort:
+- Calculate distance from escort to current_io
+- For each other IO in `all_ios`:
+  - Check if that IO has unassigned items needing same direction
+  - If escort is FURTHER from current_io than that other IO is, SKIP escort
+  - Reasoning: Escort should serve the IO it's closer to
+
+# Step 3: Detect multi-item opportunity (doubleserve)
+- Check path between item and escort
+- Identify other items on this path that could be served together
+- Mark them for batch assignment
+
+# Step 4: Validate path and return
+- Ensure path is not blocked
+- Return escort ID if valid, 0 otherwise
+
+# Key Variables
+
+- `escort_dist_to_current_io`: Distance from escort to current IO
+- `other_io_dist_to_current_io`: Distance from another IO to current IO
+- `competing_items`: Items that also move in same direction to same IO
+
+=#
+
+function find_nearest_escort_multi_io(itemid::String,items::Dict,remaining_keys::Vector, matrix::Matrix, current_io::Tuple, blockmat::Matrix, direction::Int,
+    escorts::Dict,relevantescx::Vector,relevantescy::Vector,    iteration::Int,    all_ios::Vector{Tuple{Int,Int}},    item_to_ios::Dict
+)
+    itemx, itemy = items[itemid].coords
+    nearest_id = 0
+    min_dist = Inf
+    iox, ioy = current_io
+    doubleserve = []
+
+    # Helper: check if escort would better serve another unassigned item
+    function escort_better_for_other_item(escort_x, escort_y, direction) #TODO Monday
+        # Calculate distance from current item to escort (only relevant coordinate)
+        if direction == 1
+            item_dist_to_escort = abs(escort_x - itemx)  # x-distance for x-movement
+        else  # direction == 2
+            item_dist_to_escort = abs(escort_y - itemy)  # y-distance for y-movement
+        end
+        
+        # Check if an unassigned item closer to escort targets a different IO
+        for candidate_key in remaining_keys
+            if !haskey(item_to_ios, candidate_key)
+                continue
+            end
+            
+            candidate_x, candidate_y = items[candidate_key].coords
+            
+            # Calculate distance from candidate to escort (only relevant coordinate)
+            if direction == 1
+                candidate_dist_to_escort = abs(escort_x - candidate_x)
+                # Is candidate CLOSER to escort than current item?
+                if candidate_dist_to_escort < item_dist_to_escort && candidate_x == escort_x
+                    candidate_ios = item_to_ios[candidate_key]
+                    
+                    # Check each IO the candidate targets
+                    for candidate_io in candidate_ios
+                        if candidate_io == current_io
+                            continue
+                        end
+                        
+                        # Case 1: itemx < current_io[1] < candidate_io[1] < candidate_x < escort_x
+                        # Case 2: escort_x < candidate_x < candidate_io[1] < current_io[1] < itemx (mirrored)
+                        if (itemx < current_io[1] < candidate_io[1] < candidate_x < escort_x ) ||
+                            (escort_x < candidate_x < candidate_io[1] < current_io[1] < itemx)
+                            return true
+                        end
+                       
+                    end
+                end
+            elseif direction == 2
+                
+                candidate_dist_to_escort = abs(escort_y - candidate_y)
+                # Is candidate CLOSER to escort than current item?
+                if candidate_dist_to_escort < item_dist_to_escort && candidate_y == escort_y
+                    candidate_ios = item_to_ios[candidate_key]
+                    
+                    # Check each IO the candidate targets
+                    for candidate_io in candidate_ios
+                        if candidate_io == current_io
+                            continue
+                        end
+                        
+                        # Not allowed cases (y-direction)
+                        # Case 1: itemy < current_io[2] < candidate_io[2] < candidate_y < escort_y
+                        # Case 2: escort_y < candidate_y < candidate_io[2] < current_io[2] < itemy (mirrored)
+                        if (itemy < current_io[2] < candidate_io[2] < candidate_y < escort_y) ||
+                            (escort_y < candidate_y < candidate_io[2] < current_io[2] < itemy)
+                            return true
+                        end
+                        
+                    end
+                end
+            end
+        end
+        return false
+    end
+
+
+    # Direction 1: x-direction movement
+    if direction == 1
+        
+        for e_id in relevantescx
+            escort_x, escort_y = escorts[e_id].coords
+            
+            # Ban check
+            if haskey(escorts[e_id].banset, iteration) && itemid ∈ escorts[e_id].banset[iteration]
+                continue
+            end
+            
+            # Basic sanity checks
+            if escort_y != itemy || (iox < itemx && escort_x > itemx) || (iox > itemx && escort_x < itemx)
+                continue
+            end
+            
+            # MULTI-IO CONSTRAINT: Check if escort would better serve another unassigned item
+            if escort_better_for_other_item(escort_x, escort_y, 1)
+                continue
+            end
+            
+            # Check blockmat between itemx and escort_x at y = itemy
+            xstart = min(itemx, escort_x)
+            xend = max(itemx, escort_x)
+            path_blocked = false
+            
+            for xx in xstart:xend
+                if blockmat[xx, itemy] == 1
+                    path_blocked = true
+                    break
+                elseif matrix[xx, itemy] ∈ remaining_keys
+                    if haskey(escorts[e_id].banset, iteration) && matrix[xx, itemy] ∈ escorts[e_id].banset[iteration]
+                        path_blocked = true
+                    elseif !allowedOrder(escort_x, iox, xx, itemx)
+                        path_blocked = true
+                    else
+                        push!(doubleserve, matrix[xx, itemy])
+                    end
+                end
+            end
+            
+            if path_blocked
+                continue
+            end
+            
+            dist = abs(escort_x - itemx)
+            if dist < min_dist
+                min_dist = dist
+                nearest_id = e_id
+            end
+        end
+        
+    elseif direction == 2  # y-direction movement
+        
+        for e_id in relevantescy
+            escort_x, escort_y = escorts[e_id].coords
+            
+            # Ban check
+            if haskey(escorts[e_id].banset, iteration) && itemid ∈ escorts[e_id].banset[iteration]
+                continue
+            end
+            
+            # Basic sanity checks
+            if escort_x != itemx || escort_y > itemy
+                continue
+            end
+            
+            # MULTI-IO CONSTRAINT: Check if escort would better serve another unassigned item
+            if escort_better_for_other_item(escort_x, escort_y, 2)
+                continue
+            end
+        
+            # Check blockmat between itemy and escort_y at x = itemx
+            ystart = min(itemy, escort_y)
+            yend = max(itemy, escort_y)
+            path_blocked = false
+            
+            for yy in ystart:yend
+                if blockmat[itemx, yy] == 1
+                    path_blocked = true
+                    break
+                elseif matrix[itemx, yy] ∈ remaining_keys
+                    if haskey(escorts[e_id].banset, iteration) && matrix[itemx, yy] ∈ escorts[e_id].banset[iteration]
+                        path_blocked = true
+                    elseif !allowedOrder(escort_y, ioy, yy, itemy)
+                        path_blocked = true
+                    else
+                        push!(doubleserve, matrix[itemx, yy])
+                    end
+                end
+            end
+            
+            if path_blocked
+                continue
+            end
+            
+            dist = abs(escort_y - itemy)
+            if dist < min_dist
+                min_dist = dist
+                nearest_id = e_id
+            end
+        end
+    end
+    
+
+  
+    if nearest_id != 0 #TODO should we check for all ios this block? 
+        escort_x, escort_y = escorts[nearest_id].coords
+        if ((abs(iox - escort_x) + abs(ioy - escort_y)) <= length(keys(items))+1) # escort in close proximity to IO, therefore its move will be controlled
+            futurecoords = generatefuturecoords_multi_io(items, escorts, direction, nearest_id, itemid, matrix, item_to_ios, current_io)
+            samecoords =[]
+            if direction == 2
+                samecoords = filter(x -> x[1] == itemx &&  x[2] >= min(itemy, escort_y) && x[2] <= max(itemy, escort_y), futurecoords)
+            elseif direction ==1
+                samecoords = filter(x -> x[2] == itemy &&  x[1] >= min(itemx, escort_x) && x[1] <= max(itemx, escort_x), futurecoords)
+            end
+            if !isempty(samecoords)
+                minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samecoords])
+                if minDist <= length(keys(items))+1 && # item far out from IO
+                    !path_to_io_exists_if(matrix, futurecoords, current_io)   # check with A* if this movement would cause some stupid block
+                    items[itemid].direction = 0
+                    return 0
+                end        
+            end
+        end
+    
+        for key in doubleserve # we are lucky to serve two items 
+            filter!(x -> x != key, remaining_keys)
+            items[key].direction = direction
+            # If path is blocked, revert assignment:
+            if direction == 1
+                push!(escorts[nearest_id].itemsx, key)
+            elseif direction == 2
+                push!(escorts[nearest_id].itemsy, key)
+            end
+        end
+    end
+
+
+    return nearest_id
+end
+
 function find_nearest_escort(itemid, items, sorted_keys, matrix, IO, blockmat, direction,escorts, relevantescx, relevantescy, iteration)
     itemx, itemy = items[itemid].coords
     nearest_id = 0
@@ -816,7 +1348,7 @@ function outwards_astar_with_dirchange(matrix, IO, blockmat, escortid, escorts, 
         end
     
         return found_path, min_cost
-    elseif isa(IO, Array{Tuple})
+    elseif isa(IO, Vector{Tuple{Int,Int}})
         combined_astar_matrices = zeros(Float64, rows, cols, num_io)
         for i in 1:num_io
             io = IO[i]
@@ -877,7 +1409,7 @@ function move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
     xcurr, ycurr = escorts[escortid].coords
     direction = 0
     if xgoal == xcurr && ygoal == ycurr
-        return
+        return 0
     elseif xgoal == xcurr
         if ygoal> ycurr
             direction = 2 # move escort up, block down
@@ -941,7 +1473,7 @@ function move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
     matrix[xgoal, ygoal] = escortid # update matrix
     escorts[escortid].coords = (xgoal, ygoal) # update escort's coordinates
     #print_matrix(matrix)
-    #return matrix
+    return 1
 end
 
 
@@ -1026,7 +1558,7 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     
                     push!(escorts[escortid].tabu, (escortx,escorty))
-                    move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                    moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
                     updateblockmat_e!(blockmat, escortx, escorty, escort_finalcoords[1], escort_finalcoords[2])
                     escorts[escortid].lastmoved = iteration
     
@@ -1042,7 +1574,7 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
                 end
             else
                 push!(escorts[escortid].tabu, (escortx,escorty))
-                move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
                 updateblockmat_e!(blockmat, escortx, escorty, escort_finalcoords[1], escort_finalcoords[2])
                 escorts[escortid].lastmoved = iteration
             end
@@ -1087,7 +1619,7 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
         if moved && escort_finalcoords != (esc_x,esc_y)
             push!(escorts[escortid].tabu, (esc_x,esc_y))
             push!(usedescorts,escortid)
-            move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+            moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
             updateblockmat_e!(blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
             escorts[escortid].lastmoved = iteration
         end
@@ -1107,7 +1639,7 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
             if moved && escort_finalcoords != (esc_x,esc_y)
                 push!(escorts[escortid].tabu, (esc_x,esc_y))
                 push!(usedescorts,escortid)
-                move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
                 updateblockmat_e!(blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
                 updateurgmats_e!(urgentmatrixes, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
                 escorts[escortid].lastmoved = iteration
@@ -1123,20 +1655,20 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
         moved, escort_finalcoords = freeroam!(iteration, matrix, items, escorts, escortid, blockmat, IO)
         if moved && escort_finalcoords != (esc_x,esc_y)
             push!(escorts[escortid].tabu, (esc_x,esc_y))
-            move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+            moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
             updateblockmat_e!(blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
             escorts[escortid].lastmoved = iteration
         end
     end
     #checksync(matrix, escorts, items)
-    print_matrix(matrix, blockmat)
-    #return matrix
+    #print_matrix(matrix, blockmat)
+    return (moved_any>0)
 end
 function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, blockmat, IO)
     # MOVERS FIRST
    
     iox, ioy = IO
-    
+    moved_any = 0
     serveditems = []
     checkpathformovers = false
     esccoords = [(escorts[key].coords[1], escorts[key].coords[2]) for key in moverescortids]
@@ -1208,7 +1740,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     
                     push!(escorts[escortid].tabu, (escortx,escorty))
-                    move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                    moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
                     updateblockmat_e!(blockmat, escortx, escorty, escort_finalcoords[1], escort_finalcoords[2])
                     escorts[escortid].lastmoved = iteration
     
@@ -1224,7 +1756,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
                 end
             else
                 push!(escorts[escortid].tabu, (escortx,escorty))
-                move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
                 updateblockmat_e!(blockmat, escortx, escorty, escort_finalcoords[1], escort_finalcoords[2])
                 escorts[escortid].lastmoved = iteration
             end
@@ -1275,7 +1807,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
         if moved && escort_finalcoords != (esc_x,esc_y)
             push!(escorts[escortid].tabu, (esc_x,esc_y))
             push!(usedescorts,escortid)
-            move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+            moved_any +=move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
             updateblockmat_e!(blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
             escorts[escortid].lastmoved = iteration
         end
@@ -1295,7 +1827,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
             if moved && escort_finalcoords != (esc_x,esc_y)
                 push!(escorts[escortid].tabu, (esc_x,esc_y))
                 push!(usedescorts,escortid)
-                move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                moved_any +=move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
                 updateblockmat_e!(blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
                 updateurgmats_e!(urgentmatrixes, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
                 escorts[escortid].lastmoved = iteration
@@ -1322,7 +1854,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
         end
         if moved && escort_finalcoords != (esc_x,esc_y)
             push!(escorts[escortid].tabu, (esc_x,esc_y))
-            move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+            moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
             updateblockmat_e!(blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
             escorts[escortid].lastmoved = iteration
         end
@@ -1330,12 +1862,312 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
 
     #checksync(matrix, escorts, items)
     print_matrix(matrix, blockmat)
+    return (moved_any>0)
     #return matrix
 end
 
 """
-in the effort to moveescorts! we find the nearest item to the current item to figure out where the escort should move
+Multi-IO version of moveescorts_flow!
+Uses global_escort_items structure instead of individual escort.itemsx/itemsy
+Processes mover escorts using IO-specific information and blockmats
 """
+function moveescorts_flow_multi_io!(iteration, matrix, items, escorts, io_blockmats, global_blockmat, 
+                                     global_escort_items, all_ios, item_to_ios)
+    # MOVERS FIRST - Process using global_escort_items structure
+    # global_escort_items[escort_id] = [(io, itemsx, itemsy), ...]
+    moverescortids = collect(keys(global_escort_items))
+    moved_any = 0
+    serveditems = []
+    checkpathformovers = false
+    
+    for escortid in moverescortids
+        if !haskey(global_escort_items, escortid)
+            continue
+        end
+        
+        assignments = global_escort_items[escortid]  # List of (io, itemsx, itemsy) tuples
+        
+        # Process each IO assignment for this escort
+        for (target_io, itemsx, itemsy) in assignments
+            # Determine which item and direction to serve
+            itemid = ""
+            direction = 0
+            
+            if !isempty(itemsx)
+                direction = 1
+                itemid = itemsx[1]
+            elseif !isempty(itemsy)
+                direction = 2
+                itemid = itemsy[1]
+            else
+                continue  # No items for this assignment
+            end
+            
+            if !haskey(items, itemid)
+                continue
+            end
+            
+            item = items[itemid]
+            if item.direction != direction
+                println("Item direction and escort direction do not match for multi-IO")
+                continue
+            end
+            
+            itemx, itemy = item.coords
+            escortx, escorty = escorts[escortid].coords
+            iox, ioy = target_io  # Use the specific target IO for this assignment
+            
+            # Check if escort is close to its target IO
+            if abs(iox - escortx) + abs(ioy - escorty) <= length(keys(items)) + 1
+                checkpathformovers = true
+            end
+            
+            # Find nearest item to serve next (using target IO for this escort)
+            candid, candx, candy = find_nearest_item_toitem(matrix, items, itemid, global_blockmat, target_io, direction)
+            gapx, gapy = abs(candx - iox), abs(candy - ioy)
+            
+            escort_finalcoords = (escortx, escorty)  # Default: no movement
+            
+            if direction == 1  # x-movement
+                if candid == 0 || candx == itemx
+                    escort_finalcoords = (itemx, escorty)
+                else
+                    if items[candid].direction == 1 || gapx < gapy  # moving in x
+                        if iox > min(itemx, candx)
+                            escort_finalcoords = (max(1, candx + 1), itemy)  # IO on the right
+                        elseif iox < min(itemx, candx)
+                            escort_finalcoords = (max(1, candx - 1), itemy)  # IO on the left
+                        end
+                    elseif items[candid].direction == 2 || gapy <= gapx  # moving in y
+                        escort_finalcoords = (candx, itemy)
+                    end
+                end
+                
+            elseif direction == 2  # y-movement
+                if candid == 0 || candy == itemy
+                    escort_finalcoords = (escortx, itemy)
+                else
+                    if items[candid].direction == 1 || gapx < gapy  # moving in x
+                        escort_finalcoords = (itemx, candy)
+                    elseif items[candid].direction == 2 || gapy <= gapx  # moving in y
+                        escort_finalcoords = (itemx, max(1, candy - 1))
+                    end
+                end
+            end
+            
+            # Validate movement
+            if escort_finalcoords != (escortx, escorty)
+                if checkpathformovers
+                    # Use IO-specific blockmat for this assignment
+                    
+                    itemscoords = generatefuturecoords_fincoord(items, escorts, direction, escortid, escort_finalcoords, matrix, target_io)
+                    samecoords = direction == 2 ?
+                        filter(x -> x[1] == itemx && x[2] >= min(itemy, escorty) && x[2] <= max(itemy, escorty), itemscoords) :
+                        filter(x -> x[2] == itemy && x[1] >= min(itemx, escortx) && x[1] <= max(itemx, escortx), itemscoords)
+                    
+                    if !isempty(samecoords)
+                        minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samecoords])
+                        
+                        if minDist > length(keys(items)) + 1 || path_to_io_exists_if(matrix, itemscoords, target_io)
+                            # Safe to move
+                            push!(escorts[escortid].tabu, (escortx, escorty))
+                            moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                            updateblockmat_e!(global_blockmat, escortx, escorty, escort_finalcoords[1], escort_finalcoords[2])
+                            escorts[escortid].lastmoved = iteration
+                        else
+                            # Ban this escort from moving this item next iteration
+                            if !haskey(escorts[escortid].banset, iteration + 1)
+                                escorts[escortid].banset[iteration + 1] = [itemid]
+                            else
+                                push!(escorts[escortid].banset[iteration + 1], itemid)
+                            end
+                            updateblockmat_e!(global_blockmat, escortx, escorty, escort_finalcoords[1], escort_finalcoords[2], val=0)
+                        end
+                    end
+                else
+                    # No path check needed, move directly
+                    push!(escorts[escortid].tabu, (escortx, escorty))
+                    moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                    
+                    updateblockmat_e!(global_blockmat, escortx, escorty, escort_finalcoords[1], escort_finalcoords[2])
+                    escorts[escortid].lastmoved = iteration
+                end
+            end
+        end
+    end
+    
+# ── NON-MOVERS ──────────────────────────────────────────────────────────
+    diagonal_size = sqrt(size(matrix, 1)^2 + size(matrix, 2)^2)
+
+    # Urgency: each item is checked against its own assigned IO (closest one if multiple)
+    urgentcustomers = filter(customer_id -> begin
+        item = items[customer_id]
+        assigned = get(item_to_ios, customer_id, all_ios)
+        iox, ioy = argmin(io -> abs(io[1] - item.coords[1]) + abs(io[2] - item.coords[2]), assigned)
+        floor(Int, iteration + (abs(iox - item.coords[1]) + item.coords[2]) * 1.5) >= item.deadline ||
+        (iteration - item.tes) + (abs(item.coords[1] - iox) + abs(item.coords[2] - ioy)) > diagonal_size
+    end, keys(items))
+
+    nonmovers = setdiff(keys(escorts), moverescortids)
+
+    # Sort: escorts farther from all IOs go first (they need to reposition more urgently),
+    # break ties by empty space ahead in y
+    nonmovers = sort(collect(nonmovers), by = escortid -> begin
+        esc_x, esc_y = escorts[escortid].coords
+        empty_spaces = 0
+        for y in esc_y-1:-1:1
+            if global_blockmat[esc_x, y] == 1 || matrix[esc_x, y] in keys(items) || matrix[esc_x, y] in keys(escorts)
+                break
+            end
+            empty_spaces += 1
+        end
+        dist_to_nearest_io = minimum(io -> abs(io[1] - esc_x) + abs(io[2] - esc_y), all_ios)
+        return (-dist_to_nearest_io, empty_spaces)
+    end, rev=false)
+
+    usedescorts = []
+    for escortid in nonmovers
+        esc_x, esc_y = escorts[escortid].coords
+        if global_blockmat[esc_x, esc_y] == 1
+            continue
+        end
+        moved, escort_finalcoords = directserve_flow_multi_io!(iteration, matrix, items, escorts,
+                                                                escortid, urgentcustomers,
+                                                                global_blockmat, item_to_ios, all_ios)
+                            
+        if moved && escort_finalcoords != (esc_x, esc_y)
+            #println("iter $iteration: moved $escortid from ($esc_x, $esc_y) to $escort_finalcoords")
+            push!(escorts[escortid].tabu, (esc_x, esc_y))
+            push!(usedescorts, escortid)
+            moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+            updateblockmat_e!(global_blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
+            escorts[escortid].lastmoved = iteration
+        end
+    end
+    nonmovers = setdiff(nonmovers, usedescorts)
+    usedescorts = []
+    if !isempty(urgentcustomers)
+        # Build urgmats using each item's own assigned IO, not a single global IO
+        urgentmatrixes = urgmats_multi_io(items, escorts, global_blockmat, matrix, 
+                                           urgentcustomers, item_to_ios, all_ios)
+        for escortid in nonmovers
+            esc_x, esc_y = escorts[escortid].coords
+            if global_blockmat[esc_x, esc_y] == 1
+                continue
+            end
+            moved, escort_finalcoords = urgserve_multi_io!(iteration, matrix, items, escorts, 
+                                                            escortid, urgentmatrixes, 
+                                                            item_to_ios, all_ios)
+            if moved && escort_finalcoords != (esc_x, esc_y)
+                #println("iter $iteration: moved $escortid from ($esc_x, $esc_y) to ($escort_finalcoords)")
+                push!(escorts[escortid].tabu, (esc_x, esc_y))
+                push!(usedescorts, escortid)
+                moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+                updateblockmat_e!(global_blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
+                updateurgmats_e!(urgentmatrixes, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
+                escorts[escortid].lastmoved = iteration
+            end
+        end
+    end
+    nonmovers = setdiff(nonmovers, usedescorts)
+
+  # ── BALANCING + FREEROAM ─────────────────────────────────────────────────
+    # Count escorts "belonging" to each IO: nearest IO wins
+    io_escort_counts = Dict(io => 0 for io in all_ios)
+    io_escort_members = Dict(io => [] for io in all_ios)
+    for escortid in nonmovers
+        esc_x, esc_y = escorts[escortid].coords
+        nearest_io = argmin(io -> abs(io[1] - esc_x) + abs(io[2] - esc_y), all_ios)
+        io_escort_counts[nearest_io] += 1
+        push!(io_escort_members[nearest_io], escortid)
+    end
+
+    # How many escorts should each IO ideally have
+    target_per_io = length(nonmovers) / length(all_ios)
+
+    # Build a list of (escortid, target_io) for each nonmover:
+    # - escorts in overpopulated zones get assigned to the nearest underpopulated IO
+    # - all others stay in their current zone
+    escort_target_ios = Dict{eltype(nonmovers), Any}()
+
+    # Sort IOs: overpopulated ones "donate" escorts to underpopulated ones
+    sorted_ios_by_excess = sort(all_ios, by = io -> -io_escort_counts[io])  # most populated first
+    
+    # Build a transfer list: (escortid, destination_io)
+    # For each overpopulated IO, take the escorts farthest from it (most "transferable")
+    # and assign them to the most underpopulated IO
+    for escortid in nonmovers
+        esc_x, esc_y = escorts[escortid].coords
+        nearest_io = argmin(io -> abs(io[1] - esc_x) + abs(io[2] - esc_y), all_ios)
+        escort_target_ios[escortid] = nearest_io  # default: stay in own zone
+    end
+
+    # Transfer excess escorts from overpopulated IOs to underpopulated IOs
+    for io in sorted_ios_by_excess
+        remaining_excess = io_escort_counts[io] - ceil(Int, target_per_io)
+        if remaining_excess <= 0; continue; end
+
+        # Only consider escorts still assigned to this IO (not already transferred away)
+        not_yet_transferred = filter(eid -> escort_target_ios[eid] == io, io_escort_members[io])
+
+        # Sort by closeness to target — but target may change per escort, so sort by
+        # distance to the centroid of all underpopulated IOs as a proxy
+        underpopulated = filter(io2 -> io_escort_counts[io2] < floor(Int, target_per_io), all_ios)
+        if isempty(underpopulated); continue; end
+        centroid_x = mean(io2[1] for io2 in underpopulated)
+        centroid_y = mean(io2[2] for io2 in underpopulated)
+        transferable = sort(not_yet_transferred,
+            by = eid -> abs(centroid_x - escorts[eid].coords[1]) + abs(centroid_y - escorts[eid].coords[2]))
+
+        for eid in transferable
+            if remaining_excess <= 0; break; end
+            # Recompute the most underpopulated IO for each individual escort transfer
+            target_io = argmin(io2 -> io_escort_counts[io2], all_ios)
+            if io_escort_counts[target_io] >= ceil(Int, target_per_io); break; end
+
+            escort_target_ios[eid] = target_io
+            io_escort_counts[io] -= 1
+            io_escort_counts[target_io] += 1
+            remaining_excess -= 1
+        end
+    end
+
+    # Count items per IO zone (to decide smart vs dumb within each zone)
+    io_item_counts = Dict(io => count(
+        id -> argmin(pio -> abs(pio[1] - items[id].coords[1]) + abs(pio[2] - items[id].coords[2]), all_ios) == io,
+        keys(items)) for io in all_ios)
+
+    # Freeroam: each escort uses its assigned target_io as the IO argument
+    for escortid in nonmovers
+        esc_x, esc_y = escorts[escortid].coords
+        if global_blockmat[esc_x, esc_y] == 1; continue; end
+
+        target_io = escort_target_ios[escortid]
+        escorts_in_zone = io_escort_counts[target_io]
+        items_in_zone   = io_item_counts[target_io]
+
+        # Use dumb if this zone has more escorts than items (escort is "excess" there)
+        if escorts_in_zone > items_in_zone
+            moved, escort_finalcoords = freeroam_dumb!(iteration, matrix, items, escorts,
+                                                        escortid, global_blockmat, target_io)
+        else
+            moved, escort_finalcoords = freeroam!(iteration, matrix, items, escorts,
+                                                   escortid, global_blockmat, target_io)
+        end
+
+        if moved && escort_finalcoords != (esc_x, esc_y)
+            push!(escorts[escortid].tabu, (esc_x, esc_y))
+            moved_any += move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
+            updateblockmat_e!(global_blockmat, esc_x, esc_y, escort_finalcoords[1], escort_finalcoords[2])
+            escorts[escortid].lastmoved = iteration
+        end
+    end
+
+    
+    return (moved_any > 0)
+end
+
+
 function find_nearest_item_toitem(matrix, items, itemid, blockmat, IO, direction)
     item = items[itemid]
     itemx, itemy = item.coords
@@ -2918,6 +3750,162 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
     end
     return false , (esc_x, esc_y)
 end
+function directserve_flow_multi_io!(iteration, matrix, items, escorts, escortid,
+                                     urgcusts, blockmat, item_to_ios, all_ios)
+    thisescort = escorts[escortid]
+    esc_x, esc_y = thisescort.coords
+
+    allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
+    other_escorts_coords = [(escorts[esc].coords[1], escorts[esc].coords[2]) for esc in keys(escorts) if esc != escortid]
+
+    distx, disty = size(matrix, 1)+1, size(matrix, 2)+1
+    closestx, closesty = 0, 0
+
+    # Sort all items by distance to their nearest assigned IO
+    sortedkeys = sort(collect(keys(items)), by = itemid -> begin
+        assigned = get(item_to_ios, itemid, all_ios)
+        minimum(io -> abs(io[1] - items[itemid].coords[1]) + abs(io[2] - items[itemid].coords[2]), assigned)
+    end)
+
+    sorted_urgkeys = sort_urgkeys_by_distance_toescort(items, urgcusts, (esc_x, esc_y), true)
+
+    function try_serve_item!(itemid)
+        itemx, itemy = items[itemid].coords
+        assigned_ios = get(item_to_ios, itemid, all_ios)
+
+        # ── X-DIRECTION: escort moves to item's y-row ──────────────────────
+        # Need an IO where escort and IO are on the same side of the item —
+        # that's the IO this item is heading toward, and the escort can intercept
+        item_io_x = nothing
+        for io in assigned_ios
+            if ((io[1] < itemx && esc_x < itemx) || (io[1] > itemx && esc_x > itemx)) && itemx != esc_x
+                item_io_x = io
+                break
+            end
+        end
+
+        if item_io_x !== nothing
+            iox, ioy = item_io_x
+            ygap = abs(esc_y - itemy)
+            path_blocked = false; skipItem = false
+
+            for (ox, oy) in other_escorts_coords
+                if oy == itemy
+                    if (iox > itemx && esc_x > itemx) &&
+                        (itemx < esc_x && ox < esc_x && itemx < ox)
+                        skipItem = true; break
+                    elseif (iox < itemx && esc_x < itemx) &&
+                        (itemx > esc_x && ox > esc_x && itemx > ox)
+                        skipItem = true; break
+                    end
+                end
+            end
+
+            if !skipItem && ygap <= disty && ygap > 0
+                for y in min(esc_y, itemy):max(esc_y, itemy)
+                    if blockmat[esc_x, y] == 1 || matrix[esc_x, y] in allkeys
+                        path_blocked = true; break
+                    end
+                end
+                # IO sitting between escort and item on x-axis makes the serve harmful
+                if iox > min(itemx, esc_x) && iox < max(itemx, esc_x)
+                    for x in min(esc_x, iox):max(esc_x, iox)
+                        if matrix[x, itemy] in allkeys
+                            path_blocked = true; break
+                        end
+                    end
+                end
+
+                if !path_blocked || (ygap == 0 && ((esc_x < itemx && iox < itemx) || (esc_x > itemx && iox > itemx)))
+                    itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, item_io_x)
+                    sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords)
+                    minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in sameycoords])
+                    if minDist > length(keys(items)) + 1 ||
+                        path_to_io_exists_if(matrix, itemscoords, item_io_x)
+                        disty = ygap
+                        closesty = itemid
+                    else
+                        if !haskey(thisescort.banset, iteration+1)
+                            thisescort.banset[iteration+1] = [itemid]
+                        else
+                            push!(thisescort.banset[iteration+1], itemid)
+                        end
+                    end
+                end
+            end
+        end
+
+        # ── Y-DIRECTION: escort moves to item's x-column ───────────────────
+        # Geometry here doesn't depend on which IO — escort just needs to be below item.
+        # Use nearest assigned IO only for the path validation calls.
+        if esc_y < itemy
+            xgap = abs(esc_x - itemx)
+            path_blocked = false; skipItem = false
+
+            for (ox, oy) in other_escorts_coords
+                if ox == itemx && oy < itemy
+                    skipItem = true; break
+                end
+            end
+
+            if !skipItem && xgap <= distx && xgap > 0
+                for x in min(esc_x, itemx):max(esc_x, itemx)
+                    if blockmat[x, esc_y] == 1 || matrix[x, esc_y] in allkeys
+                        path_blocked = true; break
+                    end
+                end
+
+                if !path_blocked || xgap == 0
+                    item_io_y = argmin(io -> abs(io[1] - itemx) + abs(io[2] - itemy), assigned_ios)
+                    iox, ioy = item_io_y
+                    itemscoords = generatefuturecoords(items, escorts, 2, escortid, itemid, matrix, item_io_y)
+                    samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords)
+                    minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samexcoords])
+                    if minDist > length(keys(items)) + 1 ||
+                        path_to_io_exists_if(matrix, itemscoords, item_io_y)
+                        distx = xgap
+                        closestx = itemid
+                    else
+                        if !haskey(thisescort.banset, iteration+1)
+                            thisescort.banset[iteration+1] = [itemid]
+                        else
+                            push!(thisescort.banset[iteration+1], itemid)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    # Urgent customers first
+    for itemid in sorted_urgkeys
+        try_serve_item!(itemid)
+    end
+
+    if distx < disty && closestx != 0
+        if closestx in urgcusts; filter!(id -> id != closestx, urgcusts); end
+        return true, (items[closestx].coords[1], esc_y)
+    end
+    if distx >= disty && closesty != 0
+        if closesty in urgcusts; filter!(id -> id != closesty, urgcusts); end
+        return true, (esc_x, items[closesty].coords[2])
+    end
+
+    # Then non-urgent
+    for itemid in setdiff(sortedkeys, urgcusts)
+        try_serve_item!(itemid)
+    end
+
+    if distx < disty && closestx != 0
+        return true, (items[closestx].coords[1], esc_y)
+    end
+    if distx >= disty && closesty != 0
+        return true, (esc_x, items[closesty].coords[2])
+    end
+
+    return false, (esc_x, esc_y)
+end
+
 function urgserve!(iteration, matrix, items, escorts, escortid, urgmats, IO)
     allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
     thisescort = escorts[escortid]
@@ -3176,6 +4164,196 @@ function urgserve!(iteration, matrix, items, escorts, escortid, urgmats, IO)
     end
    
     return false, (esc_x, esc_y ) # cannot move
+end
+function urgserve_multi_io!(iteration, matrix, items, escorts, escortid, urgmats, item_to_ios, all_ios)
+    allkeys = setdiff(union(keys(escorts), keys(items)), [escortid])
+    thisescort = escorts[escortid]
+    esc_x, esc_y = thisescort.coords
+
+    if !isempty(keys(urgmats))
+        urgentassignmentdict = Dict{String, Tuple{Int, Int, Int}}()
+        for urgitem in keys(urgmats)
+            urgmat = urgmats[urgitem]
+            urgx, urgy = items[urgitem].coords
+
+            # Look up this item's assigned IO — same choice as urgmats_multi_io used
+            assigned = get(item_to_ios, urgitem, all_ios)
+            item_io = argmin(io -> abs(io[1] - urgx), assigned)
+            iox, ioy = item_io   # replaces IO[1]/IO[2] everywhere below
+
+            skip_urgitem = false
+            for escid in keys(escorts)
+                if escid == escortid; continue; end
+                otherescx, otherescy = escorts[escid].coords
+                if urgmat[otherescx, otherescy] == 2
+                    skip_urgitem = true; break
+                end
+            end
+            if skip_urgitem; continue; end
+
+            foundy = false; foundx = false; completedy = false; completedx = false
+            distance = Inf
+            dir = urgx > iox ? -1 : 1    # was: urgx > IO[1]
+            candidy = 0; xin = deepcopy(esc_x); yin = deepcopy(esc_y)
+            candidx = 0; gapy = Inf; gapx = Inf
+
+            if urgmat[esc_x, esc_y] == 2
+                continue
+            end
+
+            while !completedy
+                if (esc_x < urgx && iox < urgx) ||    # was IO[1] < urgx
+                    (esc_x > urgx && iox > urgx)       # was IO[1] > urgx
+                    completedy = true; break
+                end
+                if esc_y >= urgy
+                    for y in esc_y-1:-1:1
+                        if urgmat[xin, y] == 2
+                            candidy = y; gapy = abs(esc_y - y); foundy = true; break
+                        elseif urgmat[xin, y] == 1
+                            foundy = false
+                        end
+                    end
+                    if foundy || (xin + dir < 1 || xin + dir > size(matrix, 1) ||
+                        (dir == -1 && xin + dir <= urgx) || (dir == 1 && xin + dir > urgx))
+                        completedy = true
+                    else
+                        xin += dir
+                    end
+                elseif esc_y < urgy - 1
+                    for y in esc_y+1:urgy-1
+                        if urgmat[xin, y] == 2
+                            candidy = y; gapy = abs(esc_y - y); foundy = true; break
+                        elseif urgmat[xin, y] == 1
+                            foundy = false
+                        end
+                    end
+                    if foundy || (xin + dir < 1 || xin + dir > size(matrix, 1) ||
+                        (dir == -1 && xin + dir <= urgx) || (dir == 1 && xin + dir > urgx))
+                        completedy = true
+                    else
+                        xin += dir
+                    end
+                else
+                    completedy = true
+                end
+            end
+
+            while !completedx
+                if esc_y <= urgy; completedx = true; break; end
+                if esc_x >= urgx
+                    if dir == -1  # IO-urg-esc: search left toward IO
+                        for x in esc_x-1:-1:iox    # was IO[1]
+                            if urgmat[x, esc_y] == 2
+                                candidx = x; gapx = abs(esc_x - x); foundx = true; break
+                            elseif urgmat[x, esc_y] == 1
+                                foundx = false; break
+                            end
+                        end
+                    else  # urg-esc-IO or urg-IO-esc: search left toward item
+                        for x in esc_x-1:-1:urgx
+                            if urgmat[x, esc_y] == 2
+                                candidx = x; gapx = abs(esc_x - x); foundx = true; break
+                            elseif urgmat[x, esc_y] == 1
+                                foundx = false; break
+                            end
+                        end
+                    end
+                    if foundx || yin - 1 <= urgy; completedx = true; else; yin -= 1; end
+                elseif esc_x < urgx - 1
+                    if dir == 1  # escort left of item, item left of IO: search right toward IO
+                        for x in esc_x+1:iox    # was IO[1]
+                            if urgmat[x, esc_y] == 2
+                                candidx = x; gapx = abs(esc_x - x); foundx = true; break
+                            elseif urgmat[x, esc_y] == 1
+                                foundx = false
+                            end
+                        end
+                    else  # escort left of item, item right of IO
+                        for x in esc_x+1:urgx-1
+                            if urgmat[x, esc_y] == 2
+                                candidx = x; gapx = abs(esc_x - x); foundx = true; break
+                            elseif urgmat[x, esc_y] == 1
+                                foundx = false
+                            end
+                        end
+                        for x in esc_x-1:-1:1
+                            if urgmat[x, esc_y] == 2
+                                gapotherx = abs(esc_x - x)
+                                if gapotherx < gapx; gapx = gapotherx; candidx = x; end
+                                foundx = true; break
+                            elseif urgmat[x, esc_y] == 1
+                                foundx = false
+                            end
+                        end
+                    end
+                    if foundx || yin - 1 <= urgy; completedx = true; else; yin -= 1; end
+                else
+                    completedx = true
+                end
+            end
+
+            # Distance scoring and candidate selection — unchanged from urgserve!
+            if foundy && foundx
+                onx = xin == esc_x ? 1 : 0; ony = yin == esc_y ? 1 : 0
+                if onx + ony == 2
+                    if gapx < gapy; candidx = esc_x; else; candidy = esc_y; end
+                elseif onx == 1
+                    candidy = esc_y; distance = gapx
+                elseif ony == 1
+                    candidx = esc_x; distance = gapy
+                else
+                    gapx = gapx + 5*(abs(esc_y - yin)); gapy = gapy + 5*(abs(esc_x - xin))
+                    if gapx < gapy; candidy = yin; candidx = esc_x; distance = gapx
+                    else; candidx = xin; candidy = esc_y; distance = gapy; end
+                end
+            elseif foundy
+                onx = xin == esc_x ? 1 : 0
+                if onx == 1; candidx = esc_x; distance = gapy
+                else; gapy = gapy + 5*(abs(esc_x - xin)); candidx = xin; candidy = esc_y; distance = gapy; end
+            elseif foundx
+                ony = yin == esc_y ? 1 : 0
+                if ony == 1; candidy = yin; distance = gapx
+                else; gapx = gapx + 5*(abs(esc_y - yin)); candidy = yin; candidx = esc_x; distance = gapx; end
+            end
+            if distance != Inf && candidx != 0 && candidy != 0 && !(matrix[candidx, candidy] in keys(escorts))
+                urgentassignmentdict[urgitem] = (distance, candidx, candidy)
+            end
+        end
+
+        if !isempty(urgentassignmentdict)
+            min_distance = Inf; min_key = ""; min_tuple = ()
+            for (key, value) in urgentassignmentdict
+                if value[1] < min_distance
+                    newx, newy = value[2], value[3]; skipthis = false
+                    if esc_x == newx
+                        for y in min(esc_y, newy):max(esc_y, newy)
+                            if matrix[esc_x, y] in allkeys; skipthis = true; break; end
+                        end
+                    elseif esc_y == newy
+                        for x in min(esc_x, newx):max(esc_x, newx)
+                            if matrix[x, esc_y] in allkeys; skipthis = true; break; end
+                        end
+                    end
+                    if skipthis; continue
+                    elseif !((newx, newy) in escorts[escortid].tabu)
+                        min_distance = value[1]; min_key = key; min_tuple = value
+                    end
+                end
+            end
+            if !isempty(min_tuple)
+                delete!(urgmats, min_key)
+                otheritems = setdiff(keys(urgentassignmentdict), [min_key])
+                if !haskey(thisescort.banset, iteration+1)
+                    thisescort.banset[iteration+1] = Vector{String}(collect(otheritems))
+                else
+                    append!(thisescort.banset[iteration+1], otheritems)
+                end
+                return true, (min_tuple[2], min_tuple[3])
+            end
+        end
+    end
+    return false, (esc_x, esc_y)
 end
 function freeroam!(iteration, matrix, items, escorts, escortid, blockmat, IO)
     strategy = IO[1] == 1 ? 1 : IO[1] == size(matrix, 1) ? 3 : 2 # 1: left, 2: middle, 3: right
@@ -3823,6 +5001,81 @@ function generatefuturecoords(items,  escorts,dir, escortid, itemid, matrix, IO)
     end
     return itemscoords
 end
+
+"""
+Multi-IO version of generatefuturecoords: handles items targeting different IOs
+Each item uses its own target IO to determine movement direction
+"""
+function generatefuturecoords_multi_io(items, escorts, dir, escortid, itemid, matrix, item_to_ios, current_io)
+    item = items[itemid]
+    itemx, itemy = item.coords
+    esc_x, esc_y = escorts[escortid].coords
+    itemscoords = []
+    
+    if dir == 2  # y-direction movement
+        for o_itemid in keys(items)
+            if o_itemid == itemid
+                continue
+            else
+                o_item = items[o_itemid]
+                o_itemx, o_itemy = o_item.coords
+                
+                # Check if item is in vertical path
+                if o_itemx == itemx && o_itemy < itemy && o_itemy > esc_y
+                    push!(itemscoords, (o_itemx, (max(1, (o_itemy - 1)))))
+                else
+                    push!(itemscoords, (o_itemx, o_itemy))
+                end
+            end
+        end
+        # Main item moves toward its target IO
+        push!(itemscoords, (itemx, (max(1, (itemy - 1)))))
+        
+    elseif dir == 1  # x-direction movement
+        # Use current_io to determine direction for main item
+        dir_sign = current_io[1] < itemx ? -1 : 1
+        futurecoords = (itemx, itemy)
+        
+        if dir_sign == 1
+            futurecoords = (min(itemx + 1, size(matrix, 1)), itemy)
+        else
+            futurecoords = (max(itemx - 1, 1), itemy)
+        end
+        
+        # Process other items - use their target IOs
+        for o_itemid in keys(items)
+            if o_itemid == itemid
+                continue
+            else
+                o_item = items[o_itemid]
+                o_itemx, o_itemy = o_item.coords
+                
+                # Check if item is in horizontal path
+                if o_itemy == itemy && ((o_itemx < itemx && o_itemx > esc_x) || (o_itemx > itemx && esc_x > o_itemx))
+                    # Determine direction for this other item based on its target IO
+                    if haskey(item_to_ios, o_itemid) && !isempty(item_to_ios[o_itemid])
+                        # Use first target IO for other items
+                        other_target_io = item_to_ios[o_itemid][1]
+                        other_dir_sign = other_target_io[1] < o_itemx ? -1 : 1
+                        if !(dir_sign == other_dir_sign)
+                            println("Warning: Item $o_itemid has a different target IO direction than the main item. Defaulting to main item's direction.")
+                            other_dir_sign = dir_sign  # Override to ensure consistent movement direction
+                        end
+                        push!(itemscoords, (o_itemx + other_dir_sign, o_itemy))
+                    else
+                        # Fallback to same direction as main item if no IO info
+                        push!(itemscoords, (o_itemx + dir_sign, o_itemy))
+                    end
+                else
+                    push!(itemscoords, (o_itemx, o_itemy))
+                end
+            end
+        end
+        push!(itemscoords, futurecoords)
+    end
+    
+    return itemscoords
+end
 function generatefuturecoords_fincoord(items,  escorts, dir, escortid, finalcoords, matrix, IO) 
     finx, finy = finalcoords
     esc_x, esc_y = escorts[escortid].coords
@@ -3975,6 +5228,81 @@ function urgmats(items, escorts, blockmat, matrix, urgentcustomers, IO)
     end
 
     return urgmats
+end
+function urgmats_multi_io(items, escorts, blockmat, matrix, urgentcustomers, item_to_ios, all_ios)
+    allkeys = union(keys(escorts), keys(items))
+    result = Dict{String, Matrix{Int}}()
+    for customer_id in urgentcustomers
+        urgmat = deepcopy(blockmat)
+        urgx, urgy = items[customer_id].coords
+        urgmat[urgx, urgy] = 3
+
+        # Each item uses its own assigned IO instead of a global one
+        assigned = get(item_to_ios, customer_id, all_ios)
+        item_io = argmin(io -> abs(io[1] - urgx) + abs(io[2] - urgy), assigned)
+        iox, ioy = item_io
+
+        dir = urgx > iox ? -1 : 1
+        if urgx != iox
+            if dir == 1
+                for xx in min(urgx+1, size(matrix, 1)):iox
+                    if !(matrix[xx, urgy] in allkeys)
+                        for y in min(urgy+1, size(matrix,2)):size(matrix, 2)
+                            if blockmat[xx, y] == 0 && !(matrix[xx, y] in keys(items))
+                                urgmat[xx, y] = 2
+                            else
+                                break
+                            end
+                        end
+                    else
+                        break
+                    end
+                end
+            else
+                for xx in max(urgx-1, 1):-1:iox
+                    if !(matrix[xx, urgy] in allkeys)
+                        for y in min(urgy+1, size(matrix,2)):size(matrix, 2)
+                            if blockmat[xx, y] == 0 && !(matrix[xx, y] in keys(items))
+                                urgmat[xx, y] = 2
+                            else
+                                break
+                            end
+                        end
+                    else
+                        break
+                    end
+                end
+            end
+        end
+        if urgy != ioy
+            for yy in urgy-1:-1:ioy
+                if !(matrix[urgx, yy] in allkeys)
+                    if dir == -1 || urgx == iox
+                        for x in min(urgx+1, size(matrix, 1)):size(matrix, 1)
+                            if blockmat[x, yy] == 0 && !(matrix[x, yy] in keys(items))
+                                urgmat[x, yy] = 2
+                            else
+                                break
+                            end
+                        end
+                    end
+                    if dir == 1 || urgx == iox
+                        for x in max(urgx-1, 1):-1:iox
+                            if blockmat[x, yy] == 0 && !(matrix[x, yy] in keys(items))
+                                urgmat[x, yy] = 2
+                            else
+                                break
+                            end
+                        end
+                    end
+                else
+                    break
+                end
+            end
+        end
+        result[customer_id] = urgmat
+    end
+    return result
 end
 
 function resetitems!(items)

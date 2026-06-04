@@ -58,7 +58,7 @@ function plot_matrix(matrix, items, escorts, IO)
             lw=5,
             fill=false
         )
-    elseif isa(IO, Array{Tuple})
+    elseif isa(IO, Vector{Tuple{Int,Int}})
         for io in IO
             c, r = io
             plot!(

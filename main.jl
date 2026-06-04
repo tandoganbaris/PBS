@@ -62,10 +62,10 @@ function savemakespan_item!(makespandict,allitems, itemstopick, batch, incumbent
             end
         elseif incumbentstate[iox, ioy] in keys(batch)
             itemid = incumbentstate[iox, ioy]
-            makespandict[itemid] = time - allitems[itemid].tes
+            makespandict[itemid] = time - 0 # allitems[itemid].tes  use .tes for big batches, 0 for exact comparison
             delete!(batch, itemid)
         end
-    elseif  isa(IO, Array{Tuple})
+    elseif  isa(IO, Vector{Tuple{Int,Int}})
         for io in IO
             iox, ioy = io
             if incumbentstate[iox, ioy] in keys(itemstopick) 
@@ -90,17 +90,33 @@ end
 pushes either the most urgent of the closest items to batch
 """
 function manyincloseproxy(allcoords, IO)
-    iox, ioy = IO
     prox_items = 0
-    for coord in allcoords
-        distance = abs(coord[1] - iox) + abs(coord[2] - ioy)
-        if distance <= length(allcoords)
-        prox_items += 1
+    if isa(IO, Tuple)
+        iox, ioy = IO
+        for coord in allcoords
+            distance = abs(coord[1] - iox) + abs(coord[2] - ioy)
+            if distance <= length(allcoords)
+                prox_items += 1
+                if prox_items >1
+                    return true
+                end
+            end
+        end
+    else
+        for (iox, ioy) in IO   
+            for coord in allcoords
+                distance = abs(coord[1] - iox) + abs(coord[2] - ioy)
+                if distance <= length(allcoords)
+                prox_items += 1
+                    if prox_items >1
+                        return true
+                    end
+                end
+            end 
         end
     end
-    if prox_items >1
-        return true
-    end
+    
+   
     return false
 end
 function createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
@@ -116,7 +132,7 @@ function createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
     
     if isa(IO, Tuple)
         distances = Dict(itemid => abs(itemstopick[itemid].coords[1] - iox) + abs(itemstopick[itemid].coords[2] - ioy) for itemid in keys(itemstopick))
-    elseif isa(IO, Array{Tuple})
+    elseif isa(IO, Vector{Tuple{Int,Int}})
         distances = Dict(itemid => abs(itemstopick[itemid].coords[2] - 1) for itemid in keys(itemstopick))
     else
         throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Array{Tuple}"))
@@ -203,24 +219,64 @@ function changeitems!(batch, itemstopick,time,IO)
     end
 end
 
-function main(initialstate, items, escorts, IO, testid, save_directory)
+"""
+    recalculate_makespan_by_movements(states_history, makespandict_temp)
+
+Recalculates makespan based only on iterations where movement occurred.
+For each item picked at iteration T, counts how many true movements occurred up to T.
+"""
+function recalculate_makespan_by_movements(states_history, makespandict_temp)
+    # Build a mapping of iteration -> movement state
+    movement_history = Dict{Int, Bool}()
+    for (state, moved, iter, items_state, escorts_state) in states_history
+        movement_history[iter] = moved
+    end
+    
+    # For each item in makespandict_temp, recalculate based on actual movements
+    recalculated_makespan = Dict{String, Int64}()
+    
+    for (itemid, pickup_iter) in makespandict_temp
+        # Count actual time steps (movements) up to pickup_iter
+        actual_time = 0
+        for iter in sort(collect(keys(movement_history)))
+            if iter > pickup_iter
+                break
+            end
+            if movement_history[iter]
+                actual_time += 1
+            end
+        end
+        recalculated_makespan[itemid] = actual_time
+    end
+    
+    return recalculated_makespan
+end
+
+
+function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1)
     allitems = deepcopy(items)
     itemstopick = deepcopy(items)
     local incumbentstate = deepcopy(initialstate)
-    makespandict = Dict{String, Int64}()
-    n= 4 # batch size
-    r = 1 # replenishment size
+    makespandict_temp = Dict{String, Int64}()  # Temporary, for tracking item pickup iterations
+    makespandict = Dict{String, Int64}()  # Final, will be computed based on actual movements
     time = 1
+    if isa(IO, Tuple)
+        for item in values(allitems)
+            item.assigned_io = IO
+        end
+    elseif isa(IO, Vector{Any})
+        IO = Vector{Tuple{Int,Int}}(IO)
+    end
     batch = Dict{String, Any}()
     local batch = createbatch!(batch, allitems,itemstopick, incumbentstate, time, n, IO)
-    stalematecheck = true ; shuffletrigger= false
+    stalematecheck = true 
+    shuffletrigger= false
+  
+    # Array to store states with movement info: (state, moved, iteration, items_state, escorts_state)
+    states_history = Tuple{Matrix{String}, Bool, Int, Dict, Dict}[]
+    
     while !(isempty(itemstopick)&&isempty(batch))
-
-        prevstate = deepcopy(incumbentstate) #remove this
-        if stalematecheck 
-            prevstate = deepcopy(incumbentstate)
-        end
-        savemakespan_item!(makespandict,allitems, itemstopick, batch, incumbentstate, IO, time) # deletes items from batch 
+        savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time) # deletes items from batch 
         if length(batch) <= n-r #decide on batch 
             newcandidates = createbatch!(batch,allitems,itemstopick, incumbentstate, time, r, IO) 
             if !isempty(keys(newcandidates))
@@ -234,18 +290,21 @@ function main(initialstate, items, escorts, IO, testid, save_directory)
                 break
             end
         end 
-        if shuffletrigger#remove this
+        if shuffletrigger
             changeitems!(batch,itemstopick, time,  IO)
         end
+        
         #assign escorts for items unique
-        PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
-        #PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
-       
-        save_plot(saveplot, incumbentstate, batch, escorts, IO, "$(testid)_$(time)_test", save_directory)
+        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
+        #moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
+        
+        # Store state with movement info and current items/escorts state
+        push!(states_history, (deepcopy(incumbentstate), moved, time, deepcopy(batch), deepcopy(escorts)))
+        
         time +=1
         if stalematecheck
-            if prevstate == incumbentstate
-                shuffletrigger =true
+            if !moved
+                shuffletrigger = true
             else
                 stalematecheck = false
             end
@@ -254,7 +313,80 @@ function main(initialstate, items, escorts, IO, testid, save_directory)
             break
         end
     end
+    
+    # Post-process: save all plots
+    for (state, moved, iter, items_state, escorts_state) in states_history
+        save_plot(saveplot, state, items_state, escorts_state, IO, "$(testid)_$(iter)_test", save_directory)
+    end
+    
+    # Post-process: calculate makespan based only on actual movements
+    makespandict = recalculate_makespan_by_movements(states_history, makespandict_temp)
+    
     return incumbentstate, makespandict, time-1
+end
+function main_savenow(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1)
+    allitems = deepcopy(items)
+    itemstopick = deepcopy(items)
+    local incumbentstate = deepcopy(initialstate)
+    makespandict_temp = Dict{String, Int64}()
+    makespandict = Dict{String, Int64}()
+    time = 1
+    if isa(IO, Tuple)
+        for item in values(allitems)
+            item.assigned_io = IO
+        end
+    elseif isa(IO, Vector{Any})
+        IO = Vector{Tuple{Int,Int}}(IO)
+    end
+    batch = Dict{String, Any}()
+    local batch = createbatch!(batch, allitems, itemstopick, incumbentstate, time, n, IO)
+    stalematecheck = true
+    shuffletrigger = false
+
+    states_history = Tuple{Matrix{String}, Bool, Int, Dict, Dict}[]
+
+    while !(isempty(itemstopick) && isempty(batch))
+        savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time)
+        if length(batch) <= n - r
+            newcandidates = createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
+            if !isempty(keys(newcandidates))
+                for (key, value) in newcandidates
+                    if !haskey(batch, key)
+                        batch[key] = value
+                    end
+                end
+            end
+            if isempty(batch)
+                break
+            end
+        end
+        if shuffletrigger
+            changeitems!(batch, itemstopick, time, IO)
+        end
+
+        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
+
+        push!(states_history, (deepcopy(incumbentstate), moved, time, deepcopy(batch), deepcopy(escorts)))
+
+        # Save immediately after each iteration
+        save_plot(saveplot, incumbentstate, batch, escorts, IO, "$(testid)_$(time)_test", save_directory)
+
+        time += 1
+        if stalematecheck
+            if !moved
+                shuffletrigger = true
+            else
+                stalematecheck = false
+            end
+        end
+        if time > 1000
+            break
+        end
+    end
+
+    makespandict = recalculate_makespan_by_movements(states_history, makespandict_temp)
+
+    return incumbentstate, makespandict, time - 1
 end
 function checksync_main(matrix, escorts, items)
     for eid in keys(escorts)
