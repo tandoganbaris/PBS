@@ -967,16 +967,13 @@ function find_nearest_escort(itemid, items, sorted_keys, matrix, IO, blockmat, d
     return nearest_id
 end
 function path_to_io_exists(matrix, items, IO)
-    rows, cols = size(matrix)
-    x_max, y_max = IO[1] + length(keys(items)), IO[2] 
-    # Mark future positions
-    future_blocked = zeros(Int, rows, cols)
+    itemscoords = []
     for identifier in keys(items)
         x, y = items[identifier].coords
         dir = items[identifier].direction
-        futurecoords = (x,y)
+        futurecoords = (x, y)
         if dir == 1
-            if IO[1] > x && x < rows
+            if IO[1] > x && x < size(matrix, 1)
                 futurecoords = (x + 1, y)
             elseif IO[1] < x && x > 1
                 futurecoords = (x - 1, y)
@@ -985,78 +982,17 @@ function path_to_io_exists(matrix, items, IO)
             if y > 1
                 futurecoords = (x, y - 1)
             end
-        else
-            futurecoords = (x, y)
         end
-        if futurecoords != IO
-            future_blocked[futurecoords[1], futurecoords[2]] = 1
-        end
+        push!(itemscoords, futurecoords)
     end
-
-    # Start from the furthest position
-    while future_blocked[x_max, y_max] == 1
-        if x_max < cols
-            x_max += 1
-        elseif y_max < rows
-            y_max += 1
-        end
-    end
-   
-    startcoords = (x_max, y_max)
-
-    # A* search setup
-    visited = zeros(Int, rows, cols)
-    dist = fill(Inf, rows, cols)
-    open_set = BinaryMinHeap{Tuple{Float64, Int, Int}}()  # Store (priority, x, y)
-
-    # Manhattan heuristic
-    h(x, y) = abs(x - startcoords[1]) + abs(y - startcoords[2])
-    #h(nx, ny) = 0
-    dist[IO[1], IO[2]] = 0
-    # Enqueue start with priority = cost + heuristic
-    priority = dist[IO[1], IO[2]] + h(IO[1], IO[2])
-    push!(open_set, (priority, IO[1], IO[2]))  # Wrap everything in a tuple
-
-    # A* loop
-    while !isempty(open_set)
-        (priority, cx, cy) = pop!(open_set)  # Extract priority and coordinates
-    
-        if visited[cx, cy] == 1
-            continue
-        end
-        visited[cx, cy] = 1
-    
-        if (cx, cy) == startcoords 
-            return true
-        end
-        
-    
-        # Explore neighbors
-        for (nx, ny) in [(cx+1, cy), (cx-1, cy), (cx, cy+1), (cx, cy-1)]
-            if 1 ≤ nx ≤ rows && 1 ≤ ny ≤ cols && future_blocked[nx, ny] != 1
-                cost_here = dist[cx, cy] + 1
-        
-                if cost_here < dist[nx, ny]
-                    if (nx, ny) == startcoords
-                        return true
-                    end
-                    dist[nx, ny] = cost_here
-                    priority = cost_here + h(nx, ny)
-    
-                    push!(open_set, (priority, nx, ny))  # Min-Heap allows duplicate priorities
-                  
-                end
-            end
-        end
-    end
-    #println("No path found to start coordinates: ", startcoords)
-    #print_matrix(future_blocked, visited)
-    return false
+    return path_to_io_exists_if(matrix, itemscoords, IO)
 end
 function path_to_io_exists_if(matrix, itemscoords, IO)
     rows, cols = size(matrix)
     dir = IO[1]>size(matrix,1)/2 ? -1 : 1 # if io is on the left we have sink right, else on the left
-    x_max= dir == 1 ? min(size(matrix,1),(IO[1] + length(itemscoords))) : max(1, IO[1] - length(itemscoords)); y_max =  IO[2] 
+
+    x_max= dir == 1 ? min(size(matrix,1),(IO[1] + length(itemscoords))) : max(1, IO[1] - length(itemscoords)); y_max =  IO[2]
+
     # Mark future positions
     future_blocked = zeros(Int, rows, cols)
     for pair in itemscoords
@@ -1066,69 +1002,44 @@ function path_to_io_exists_if(matrix, itemscoords, IO)
         end
     end
 
-    while future_blocked[x_max, y_max] == 1
-        if x_max < rows
-            if x_max > 1
-                x_max += dir
-            else
-                dir = dir * -1
-                x_max += dir
-            end
-        elseif y_max < cols
-            y_max += 1
-        elseif x_max == rows && y_max == cols
-            y_max = Int(cols/2)
-            x_max = Int(rows/2)
-        end
-    end
-   
+    x_max = min(x_max, rows)
+    y_max = min(y_max, cols)
     startcoords = (x_max, y_max)
+    target_dist = abs(startcoords[1] - IO[1]) + abs(startcoords[2] - IO[2])
 
     # A* search setup
     visited = zeros(Int, rows, cols)
     dist = fill(Inf, rows, cols)
     open_set = BinaryMinHeap{Tuple{Float64, Int, Int}}()  # Store (priority, x, y)
 
-    # Manhattan heuristic
+    # Manhattan heuristic toward startcoords
     h(x, y) = abs(x - startcoords[1]) + abs(y - startcoords[2])
-    #h(nx, ny) = 0
     dist[IO[1], IO[2]] = 0
-    # Enqueue start with priority = cost + heuristic
     priority = dist[IO[1], IO[2]] + h(IO[1], IO[2])
-    push!(open_set, (priority, IO[1], IO[2]))  # Wrap everything in a tuple
+    push!(open_set, (priority, IO[1], IO[2]))
 
     # A* loop
     while !isempty(open_set)
-        (priority, cx, cy) = pop!(open_set)  # Extract priority and coordinates
-    
+        (priority, cx, cy) = pop!(open_set)
+
         if visited[cx, cy] == 1
             continue
         end
         visited[cx, cy] = 1
-    
-        if (cx, cy) == startcoords 
+
+        # succeed if any cell at the target Manhattan distance from IO is reached
+        if abs(cx - IO[1]) + abs(cy - IO[2]) >= target_dist
             return true
         end
-        
-    
+
         # Explore neighbors
         for (nx, ny) in [(cx+1, cy), (cx-1, cy), (cx, cy+1), (cx, cy-1)]
-            if (nx, ny) == startcoords && future_blocked[nx, ny] == 1
-                println("issue with wrong dest writing")
-                return true
-            end 
             if 1 ≤ nx ≤ rows && 1 ≤ ny ≤ cols && future_blocked[nx, ny] != 1
                 cost_here = dist[cx, cy] + 1
-        
                 if cost_here < dist[nx, ny]
-                    if (nx, ny) == startcoords
-                        return true
-                    end
                     dist[nx, ny] = cost_here
                     priority = cost_here + h(nx, ny)
-    
-                    push!(open_set, (priority, nx, ny))  # Min-Heap allows duplicate priorities
-                  
+                    push!(open_set, (priority, nx, ny))
                 end
             end
         end

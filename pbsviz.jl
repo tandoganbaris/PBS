@@ -4,7 +4,7 @@ function plot_matrix(matrix, items, escorts, IO)
     # In this version, matrix has dimensions (ncols, nrows)
     ncols, nrows = size(matrix)
     heatmap_matrix = fill(1, ncols, nrows)  # fill first dimension as columns, second as rows
-    
+
     # Mark items (storing them at [col, row])
     for itemid in keys(items)
         item = items[itemid]  # Suppose item.coords = (col, row)
@@ -17,12 +17,10 @@ function plot_matrix(matrix, items, escorts, IO)
         c, r = escort.coords
         heatmap_matrix[c, r] = 3
     end
-    
-    heatmap_colors = [:lightblue, :tomato, :linen]
-    
+
     p = heatmap(
         heatmap_matrix',  # transpose here
-        color=[ :lightblue, :tomato, :linen ],
+        color=[:lightblue, :tomato, :white],
         axis=false,
         xlims=(0.5, ncols + 0.5),
         ylims=(0.5, nrows + 0.5),
