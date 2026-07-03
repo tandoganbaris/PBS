@@ -4,6 +4,8 @@ include("main.jl")
 using CSV
 using DataFrames
 
+const NO_CORES = 6   # change here to control parallelism (1 = single-core, no workers)
+
 function parse_coords(coord_str)
     stripped = replace(coord_str, r"[\{\}]" => "")
     coords = strip.(split(stripped, ">"))
@@ -29,7 +31,7 @@ end
     
     # Strip whitespace from column names
     rename!(df_all, strip.(names(df_all)))
-    df = filter(r -> !ismissing(r[:id]) && r[:id] == "16_8_4_1", df_all)  # keep only the row with this id, skip missing IDs
+     df = filter(r -> !ismissing(r[:id]) && r[:id] == "16_8_4_46", df_all)  # keep only the row with this id, skip missing IDs
     #df = filter(r -> !ismissing(r[:id]) && r[:id] == "10_12_4_42", df_all) 
  # Arrays to store heuristics
     makespan_heuristics = Float64[]
@@ -42,7 +44,7 @@ end
 
         # Construct a new folder path for plots
         folder_path = joinpath(raw"C:\codestuff\PBS\plots", string(id_str))
-        mkpath(folder_path)  # Uncomment if you want to create the folder
+        isdir(folder_path) || mkpath(folder_path)  # Uncomment if you want to create the folder
 
         # Parse grid size, e.g. "10x10"
         size_str = row[Symbol("Lx x Ly")]
@@ -95,7 +97,7 @@ end
             initialstate, items, escorts,
             IO_coords,
             1,
-            folder_path, n=4  # pass the new folder path and batch size to main
+            folder_path, n=4, no_cores=NO_CORES
         )
 
         # 1) The makespan from your algorithm

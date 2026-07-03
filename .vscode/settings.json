@@ -1,3 +1,4 @@
 {
-    "julia.environmentPath": "c:\\Users\\baris\\PBSproject\\PBS\\PBS_env"
+    "julia.environmentPath": "c:\\codestuff\\PBS\\pbsHeuristic\\PBS_env",
+    "julia.additionalArgs": ["--threads", "1"]
 }

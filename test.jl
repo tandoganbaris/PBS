@@ -3,6 +3,11 @@ include("main.jl")
 using CSV
 using DataFrames
 
+const NO_CORES = Threads.nthreads()  # set via julia --threads N or JULIA_NUM_THREADS=N
+println("Using $NO_CORES threads for parallel execution.")
+Threads.nthreads() == 1 && @warn "Running on 1 thread. Start Julia with --threads N for parallel execution."
+const REPS_PER_ROW = NO_CORES > 1 ? 5 : 1
+
 # Helper function to parse coordinate strings like "{<1 5> <2 6>...}"
 using CSV
 using DataFrames
@@ -23,8 +28,9 @@ function parse_coords(coord_str)
 end
 
 @testset "CSV Rows" begin
-    df = CSV.read(raw"C:\codestuff\PBS\bm_4l_10x10_1IO.csv", DataFrame)
-
+    df =  CSV.read(raw"C:\codestuff\PBS\bm_4l_10x10_1IO.csv", DataFrame)
+     #CSV.read(raw"C:\codestuff\PBS\bm_4l_MIO.csv", DataFrame)
+   #df = filter(r -> !ismissing(r[:id]) && r[:id] == "10_8_4_1", df)
     rename!(df, strip.(names(df)))
 
     # Arrays to store heuristics
@@ -38,7 +44,7 @@ end
 
         # Construct a new folder path for plots
         folder_path = joinpath(raw"C:\codestuff\PBS\plots", string(id_str))
-        mkpath(folder_path)  # Uncomment if you want to create the folder
+        isdir(folder_path) || mkpath(folder_path)  # Uncomment if you want to create the folder
 
         # Parse grid size, e.g. "10x10"
         size_str = row[Symbol("Lx x Ly")]
@@ -46,56 +52,73 @@ end
 
         # Parse IO, escort, and item coords
         IO_coords = parse_coords(row[:IOs])
+        if length(IO_coords) == 1
+            IO_coords = IO_coords[1]
+        end
         escort_coords = parse_coords(row[:Escorts])
         item_coords = parse_coords(row[Symbol("Target Loads")])
 
-        # Build escorts
-        escorts = Dict{String, Any}()
-        for (k, coord) in enumerate(escort_coords)
-            escorts["E$k"] = escort(
-                "E$k", coord, String[], String[], 0,
-                Dict{Int64,Vector{String}}(),
-                Tuple{Int64,Int64}[]
-            )
+        global saveplot = false
+
+        best_makespan = nothing
+        best_makespandict = nothing
+
+        for rep in 1:REPS_PER_ROW
+            # Build escorts fresh each rep: main() mutates this dict in place,
+            # so reusing it across reps would carry over state from the previous run.
+            escorts = Dict{String, Any}()
+            for (k, coord) in enumerate(escort_coords)
+                escorts["E$k"] = escort(
+                    "E$k", coord, String[], String[], 0,
+                    Dict{Int64,Vector{String}}(),
+                    Tuple{Int64,Int64}[]
+                )
+            end
+
+            # Build items
+            items = Dict{String, Any}()
+            for (k, coord) in enumerate(item_coords)
+                items["I$k"] = item("I$k", coord, 0, 0, 1000.0, 1, nothing)
+            end
+
+            # Example placeholder matrix
+            initialstate = fill("0", Lx, Ly)
+
+            # Place escorts in initialstate
+            for (key, esc) in escorts
+                x, y = esc.coords
+                initialstate[x, y] = key
+            end
+
+            # Place items in initialstate
+            for (key, itm) in items
+                x, y = itm.coords
+                initialstate[x, y] = key
+            end
+
+            _, makespandict, makespan = try
+                main(
+                    initialstate, items, escorts,
+                    IO_coords,
+                    1,
+                    folder_path, n=4, no_cores=NO_CORES
+                )
+            catch e
+                println("\n*** ERROR on instance: $id_str (rep $rep) ***")
+                rethrow(e)
+            end
+
+            if best_makespan === nothing || makespan < best_makespan
+                best_makespan = makespan
+                best_makespandict = makespandict
+            end
         end
 
-        # Build items
-        items = Dict{String, Any}()
-        for (k, coord) in enumerate(item_coords)
-            items["I$k"] = item("I$k", coord, 0, 0, 1000.0, 1, nothing)
-        end
+        # 1) The best makespan from your algorithm across reps
+        push!(makespan_heuristics, best_makespan)
 
-        # Example placeholder matrix
-        initialstate = fill("0", Lx, Ly)
-
-        # Place escorts in initialstate
-        for (key, esc) in escorts
-            x, y = esc.coords
-            initialstate[x, y] = key
-        end
-
-        # Place items in initialstate
-        for (key, itm) in items
-            x, y = itm.coords
-            initialstate[x, y] = key
-        end
-      
-            global saveplot = true
-
-        
-        
-        finalstate, makespandict, makespan = main(
-            initialstate, items, escorts,
-            IO_coords,
-            1,
-            folder_path, n=2  # pass the new folder path and batch size to main
-        )
-
-        # 1) The makespan from your algorithm
-        push!(makespan_heuristics, makespan)
-
-        # 2) The average of the values in makespandict
-        dict_values = collect(values(makespandict))
+        # 2) The average of the values in makespandict for the best rep
+        dict_values = collect(values(best_makespandict))
         avg_value = length(dict_values) > 0 ? sum(dict_values) : 0.0
         push!(average_dict_heuristics, avg_value)
     end
@@ -105,5 +128,5 @@ end
     df[!, :flowtime_heuristic] = average_dict_heuristics
 
     # Write updated CSV
-    CSV.write(raw"C:\codestuff\PBS\outputtestn2.csv", df)
+    CSV.write(raw"C:\codestuff\PBS\outputtestn4.csv", df)
 end

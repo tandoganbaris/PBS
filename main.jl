@@ -1,8 +1,13 @@
+using Distributed
 using Random
 using Statistics
 include("structs.jl")
 include("pbsviz.jl")
 include("move.jl")
+
+function setup_workers!(n::Int)
+    # no-op: parallelism now uses Threads.@threads, no worker processes needed
+end
 
 rng = MersenneTwister(1234)
 
@@ -121,16 +126,16 @@ function manyincloseproxy(allcoords, IO)
 end
 function createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
     newbatch = Dict{String, Any}()
-    iox, ioy = IO
-   
+
     for idx in CartesianIndices(incumbentstate) # can we remove this???
         if incumbentstate[idx] in keys(itemstopick)
             item = itemstopick[incumbentstate[idx]]
-            item.coords = Tuple(idx)          
+            item.coords = Tuple(idx)
         end
     end
-    
+
     if isa(IO, Tuple)
+        iox, ioy = IO
         distances = Dict(itemid => abs(itemstopick[itemid].coords[1] - iox) + abs(itemstopick[itemid].coords[2] - ioy) for itemid in keys(itemstopick))
     elseif isa(IO, Vector{Tuple{Int,Int}})
         distances = Dict(itemid => abs(itemstopick[itemid].coords[2] - 1) for itemid in keys(itemstopick))
@@ -158,6 +163,10 @@ function createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
     end
     while length(newbatch) < r && !isempty(sorted_distances)
         itemid = sorted_distances[1][1]
+        if !haskey(itemstopick, itemid)
+            deleteat!(sorted_distances, 1)
+            continue
+        end
         item = itemstopick[itemid]
         coords = item.coords
         l_allcoords= deepcopy(allcoords)
@@ -253,7 +262,8 @@ function recalculate_makespan_by_movements(states_history, makespandict_temp)
 end
 
 
-function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1)
+function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1)
+    setup_workers!(no_cores)   # spawns workers + loads code on them if not done yet
     allitems = deepcopy(items)
     itemstopick = deepcopy(items)
     local incumbentstate = deepcopy(initialstate)
@@ -295,7 +305,7 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
         end
         
         #assign escorts for items unique
-        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
+        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime", no_cores=no_cores)
         #moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
         
         # Store state with movement info and current items/escorts state
@@ -318,13 +328,16 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
     for (state, moved, iter, items_state, escorts_state) in states_history
         save_plot(saveplot, state, items_state, escorts_state, IO, "$(testid)_$(iter)_test", save_directory)
     end
-    
+    if time >900
+        println("Warning: reached iteration limit without completing all items. Check for potential issues.")
+    end
     # Post-process: calculate makespan based only on actual movements
     makespandict = recalculate_makespan_by_movements(states_history, makespandict_temp)
     
     return incumbentstate, makespandict, time-1
 end
-function main_savenow(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1)
+function main_savenow(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1)
+    setup_workers!(no_cores)
     allitems = deepcopy(items)
     itemstopick = deepcopy(items)
     local incumbentstate = deepcopy(initialstate)
@@ -364,7 +377,7 @@ function main_savenow(initialstate, items, escorts, IO, testid, save_directory; 
             changeitems!(batch, itemstopick, time, IO)
         end
 
-        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime")
+        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime", no_cores=no_cores)
 
         push!(states_history, (deepcopy(incumbentstate), moved, time, deepcopy(batch), deepcopy(escorts)))
 
