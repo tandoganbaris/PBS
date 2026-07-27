@@ -9,7 +9,7 @@ const NO_CORES = 6   # change here to control parallelism (1 = single-core, no w
 function parse_coords(coord_str)
     stripped = replace(coord_str, r"[\{\}]" => "")
     coords = strip.(split(stripped, ">"))
-    result = []
+    result = Tuple{Int,Int}[]
     for c in coords
         c = replace(c, "<" => "")
         c = strip(c)
@@ -59,7 +59,7 @@ end
         item_coords = parse_coords(row[Symbol("Target Loads")])
 
         # Build escorts
-        escorts = Dict{String, Any}()
+        escorts = Dict{String, escort}()
         for (k, coord) in enumerate(escort_coords)
             escorts["E$k"] = escort(
                 "E$k", coord, String[], String[], 0,
@@ -69,7 +69,7 @@ end
         end
 
         # Build items
-        items = Dict{String, Any}()
+        items = Dict{String, item}()
         for (k, coord) in enumerate(item_coords)
             items["I$k"] = item("I$k", coord, 0, 0, 1000.0, 1, nothing)
         end

@@ -15,7 +15,7 @@ using DataFrames
 function parse_coords(coord_str)
     stripped = replace(coord_str, r"[\{\}]" => "")
     coords = strip.(split(stripped, ">"))
-    result = []
+    result = Tuple{Int,Int}[]
     for c in coords
         c = replace(c, "<" => "")
         parts = split(strip(c))
@@ -28,14 +28,15 @@ function parse_coords(coord_str)
 end
 
 @testset "CSV Rows" begin
-    df =  CSV.read(raw"C:\codestuff\PBS\bm_4l_10x10_1IO.csv", DataFrame)
-     #CSV.read(raw"C:\codestuff\PBS\bm_4l_MIO.csv", DataFrame)
-   #df = filter(r -> !ismissing(r[:id]) && r[:id] == "10_8_4_1", df)
+    df =  CSV.read(raw"C:\codestuff\PBS\bm_4l_10x10_1IO_2.csv", DataFrame)
+     #CSV.read(raw"C:\codestuff\PBS\bm_4l_MIO.csv", DataFrame) #
+    #df = filter(r -> !ismissing(r[:id]) && r[:id] == "27_20_4_47", df)
+
     rename!(df, strip.(names(df)))
 
     # Arrays to store heuristics
-    makespan_heuristics = Float64[]
-    average_dict_heuristics = Float64[]
+    makespan_heuristics = Union{Float64,Missing}[]
+    average_dict_heuristics = Union{Float64,Missing}[]
     
 
     for row in eachrow(df)
@@ -66,7 +67,7 @@ end
         for rep in 1:REPS_PER_ROW
             # Build escorts fresh each rep: main() mutates this dict in place,
             # so reusing it across reps would carry over state from the previous run.
-            escorts = Dict{String, Any}()
+            escorts = Dict{String, escort}()
             for (k, coord) in enumerate(escort_coords)
                 escorts["E$k"] = escort(
                     "E$k", coord, String[], String[], 0,
@@ -76,7 +77,7 @@ end
             end
 
             # Build items
-            items = Dict{String, Any}()
+            items = Dict{String, item}()
             for (k, coord) in enumerate(item_coords)
                 items["I$k"] = item("I$k", coord, 0, 0, 1000.0, 1, nothing)
             end
@@ -96,22 +97,36 @@ end
                 initialstate[x, y] = key
             end
 
-            _, makespandict, makespan = try
-                main(
+            makespandict, makespan = try
+                _, makespandict, makespan = main(
                     initialstate, items, escorts,
                     IO_coords,
                     1,
                     folder_path, n=4, no_cores=NO_CORES
                 )
+                makespandict, makespan
             catch e
-                println("\n*** ERROR on instance: $id_str (rep $rep) ***")
-                rethrow(e)
+                println("\n*** ERROR on instance: $id_str (rep $rep) — skipping this rep ***")
+                showerror(stdout, e)
+                println()
+                nothing, nothing
+            end
+
+            if makespan === nothing
+                continue
             end
 
             if best_makespan === nothing || makespan < best_makespan
                 best_makespan = makespan
                 best_makespandict = makespandict
             end
+        end
+
+        if best_makespan === nothing
+            println("*** All reps failed on instance: $id_str — recording missing ***")
+            push!(makespan_heuristics, missing)
+            push!(average_dict_heuristics, missing)
+            continue
         end
 
         # 1) The best makespan from your algorithm across reps
@@ -128,5 +143,5 @@ end
     df[!, :flowtime_heuristic] = average_dict_heuristics
 
     # Write updated CSV
-    CSV.write(raw"C:\codestuff\PBS\outputtestn4.csv", df)
+    CSV.write(raw"C:\codestuff\PBS\outputtestn4_2.csv", df)
 end

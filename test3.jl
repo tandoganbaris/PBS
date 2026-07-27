@@ -59,12 +59,12 @@ function solve_and_save_text(initialstate, items, escorts_dict, IO, solution_pat
         IO = Vector{Tuple{Int,Int}}(IO)
     end
 
-    batch = Dict{String, Any}()
+    batch = Dict{String, item}()
     batch = createbatch!(batch, allitems, itemstopick, incumbentstate, timestep, n, IO)
     stalematecheck = true
     shuffletrigger = false
 
-    states_history = Tuple{Matrix{String}, Bool, Int, Dict, Dict}[]
+    states_history = Tuple{Matrix{String}, Bool, Int, Dict{String,item}, Dict{String,escort}}[]
 
     while !(isempty(itemstopick) && isempty(batch))
         savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, timestep)

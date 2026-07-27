@@ -15,11 +15,9 @@ function randomintialstate(matrixsize, noescorts, items, rng)
     state = Matrix{String}(undef, matrixsize[1], matrixsize[2])
 
     # Pre-fill with empty strings
-    for i in 1:matrixsize[1], j in 1:matrixsize[2]
-        state[i, j] = ""
-    end
-    escorts = Dict{String, Any}()
-    itemswithcoords = Dict{String, Any}()
+    fill!(state, "")
+    escorts = Dict{String, escort}()
+    itemswithcoords = Dict{String, item}()
 
     # Prepare item and escort labels
     item_count = matrixsize[1] * matrixsize[2] - noescorts
@@ -32,8 +30,8 @@ function randomintialstate(matrixsize, noescorts, items, rng)
     
     # Fill the matrix
     idx = 1
-    for i in 1:matrixsize[1], j in 1:matrixsize[2]
-        currid = all_names[idx] 
+    for j in 1:matrixsize[2], i in 1:matrixsize[1]
+        currid = all_names[idx]
         state[i, j] = currid
         if currid  in escort_names
             escort = createescort(currid, (i,j), 0)
@@ -125,7 +123,7 @@ function manyincloseproxy(allcoords, IO)
     return false
 end
 function createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
-    newbatch = Dict{String, Any}()
+    newbatch = Dict{String, item}()
 
     for idx in CartesianIndices(incumbentstate) # can we remove this???
         if incumbentstate[idx] in keys(itemstopick)
@@ -185,7 +183,7 @@ function createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
 end
 function changeitems!(batch, itemstopick,time,IO)
     noitems = length(keys(batch))
-    closetoIO = []
+    closetoIO = String[]
     if isa(IO, Tuple)
         iox, ioy = IO
         for (itemid, item) in batch
@@ -262,8 +260,55 @@ function recalculate_makespan_by_movements(states_history, makespandict_temp)
 end
 
 
+function io_distance(coords, IO)
+    if isa(IO, Tuple)
+        return abs(coords[1] - IO[1]) + abs(coords[2] - IO[2])
+    else
+        return minimum(abs(coords[1] - iox) + abs(coords[2] - ioy) for (iox, ioy) in IO)
+    end
+end
+
+function grasp_deadline_order(items, IO, α::Float64, rng)
+    pool = collect(keys(items))
+    result = String[]
+    while !isempty(pool)
+        dists = [io_distance(items[k].coords, IO) for k in pool]
+        d_min, d_max = minimum(dists), maximum(dists)
+        threshold = d_min + α * (d_max - d_min)
+        rcl = [pool[i] for i in eachindex(pool) if dists[i] <= threshold]
+        chosen = rcl[rand(rng, 1:length(rcl))]
+        push!(result, chosen)
+        filter!(k -> k != chosen, pool)
+    end
+    return result
+end
+
+function assign_default_deadlines!(items, matrixsize, IO, no_cores, rng)
+    if isempty(items)
+        return
+    end
+    deadlines = [it.deadline for it in values(items)]
+    placeholder = first(deadlines)
+    if !(placeholder == 0.0 || placeholder == 1000.0) || !all(d -> d == placeholder, deadlines)
+        return
+    end
+    if no_cores <= 1
+        for item in values(items)
+            item.deadline = Float64(io_distance(item.coords, IO) +1)
+        end
+    else
+        upper = (matrixsize[1] * matrixsize[2])^2
+        order = grasp_deadline_order(items, IO, 0.1, rng)
+        n = length(order)
+        for (rank, itemid) in enumerate(order)
+            items[itemid].deadline = Float64(ceil(Int, rank / n * upper))
+        end
+    end
+end
+
 function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1)
     setup_workers!(no_cores)   # spawns workers + loads code on them if not done yet
+    assign_default_deadlines!(items, size(initialstate), IO, no_cores, rng)
     allitems = deepcopy(items)
     itemstopick = deepcopy(items)
     local incumbentstate = deepcopy(initialstate)
@@ -277,13 +322,13 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
     elseif isa(IO, Vector{Any})
         IO = Vector{Tuple{Int,Int}}(IO)
     end
-    batch = Dict{String, Any}()
+    batch = Dict{String, item}()
     local batch = createbatch!(batch, allitems,itemstopick, incumbentstate, time, n, IO)
     stalematecheck = true 
     shuffletrigger= false
   
     # Array to store states with movement info: (state, moved, iteration, items_state, escorts_state)
-    states_history = Tuple{Matrix{String}, Bool, Int, Dict, Dict}[]
+    states_history = Tuple{Matrix{String}, Bool, Int, Dict{String,item}, Dict{String,escort}}[]
     
     while !(isempty(itemstopick)&&isempty(batch))
         savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time) # deletes items from batch 
@@ -338,6 +383,7 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
 end
 function main_savenow(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1)
     setup_workers!(no_cores)
+    assign_default_deadlines!(items, size(initialstate), IO, no_cores, rng)
     allitems = deepcopy(items)
     itemstopick = deepcopy(items)
     local incumbentstate = deepcopy(initialstate)
@@ -351,12 +397,12 @@ function main_savenow(initialstate, items, escorts, IO, testid, save_directory; 
     elseif isa(IO, Vector{Any})
         IO = Vector{Tuple{Int,Int}}(IO)
     end
-    batch = Dict{String, Any}()
+    batch = Dict{String, item}()
     local batch = createbatch!(batch, allitems, itemstopick, incumbentstate, time, n, IO)
     stalematecheck = true
     shuffletrigger = false
 
-    states_history = Tuple{Matrix{String}, Bool, Int, Dict, Dict}[]
+    states_history = Tuple{Matrix{String}, Bool, Int, Dict{String,item}, Dict{String,escort}}[]
 
     while !(isempty(itemstopick) && isempty(batch))
         savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time)

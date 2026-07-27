@@ -19,8 +19,8 @@ MARKED_ITEM_POSITIONS = [
 
 function build_presentation_state(escort_positions, item_positions)
     state   = fill("0", 10, 10)
-    escorts = Dict{String, Any}()
-    items   = Dict{String, Any}()
+    escorts = Dict{String, escort}()
+    items   = Dict{String, item}()
 
     for (k, (i, j)) in enumerate(escort_positions)
         eid = "A*" * string(k)

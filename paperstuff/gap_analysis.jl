@@ -1,7 +1,7 @@
 using CSV, DataFrames, Statistics, Printf
 using StatsPlots, Plots
 
-df = CSV.read(raw"C:\codestuff\PBS\outputtestn4.csv", DataFrame)
+df = CSV.read(raw"C:\codestuff\PBS\outputtestn4_2.csv", DataFrame)
 
 # ── Filter: only rows where ILP found a feasible solution ─────────────────────
 function pos_num(v)
@@ -44,7 +44,7 @@ xs_ms = Float64.(1:length(escort_groups)) .- 0.2
 xs_ft = Float64.(1:length(escort_groups)) .+ 0.2
 
 p = plot(
-    title  = "Heuristic vs ILP gap by escort count (10x10, 4 loads, 1 IO)",
+    title  = "Heuristic vs ILP gap by escort count (10x10, 4 loads, M IO)",
     ylabel = "Gap (%)",
     xlabel = "Number of escorts",
     legend = :topright,
@@ -79,7 +79,7 @@ end
 display(p)
 outdir = raw"C:\codestuff\PBS\paperplots"
 mkpath(outdir)
-savefig(joinpath(outdir, "gap_analysis.png"))
+#savefig(joinpath(outdir, "gap_analysismio.png"))
 
 for (metric_name, col) in metrics
     println("═"^78)
