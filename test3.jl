@@ -192,7 +192,7 @@ function run_experiments()
             rng_inst = MersenneTwister(seed)
 
             # All items available from time 1 (deadline = 1.0)
-            item_deadlines = Dict("$i" => 1.0 for i in 1:n_items)
+            item_deadlines = Dict("$i" => 1.0 for i in 1:n_items), 
 
             initialstate, items, escorts_dict =
                 randomintialstate((grid_n, grid_n), n_escorts, item_deadlines, rng_inst)

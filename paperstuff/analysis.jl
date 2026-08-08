@@ -26,13 +26,14 @@ CSV.write(joinpath(OUT_DIR, "aggregated.csv"), agg)
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const METRICS = [
-    (:makespan,      "Makespan (steps)",          "makespan"),
-    (:flowtime,      "Flowtime (sum of steps)",   "flowtime"),
+    (:makespan,      "Makespan",          "makespan"),
+    (:flowtime,      "Flow-time",   "flowtime"),
     (:comp_time_sec, "Computation time (s)",      "comptime"),
 ]
 
-const ITEM_COLORS  = [:blue, :orange, :green, :red, :purple]
+const LOAD_COLORS   = [:blue, :orange, :green, :red, :purple]
 const ESCORT_COLORS = palette(:tab10)[1:10]
+const GRID_COLORS   = palette(:tab10)[1:10]
 
 function base_plot(ylabel)
     plot(
@@ -47,17 +48,52 @@ function base_plot(ylabel)
     )
 end
 
+# Combined side-by-side plot: flowtime (left) + makespan (right), one figure.
+# by_df must already be filtered to a single io_position and grouped by (xcol, seriescol).
+function combined_flow_makespan_plot(by_df, xcol, seriescol, series_values, colors,
+                                      xlabel, series_label_fn, title_prefix, io, outfile)
+    p_flow = base_plot("Flow-time")
+    plot!(p_flow, xlabel = xlabel, legend = false, bottom_margin = 20px, left_margin = 20px, right_margin = 20px)
+    p_make = base_plot("Makespan")
+    plot!(p_make, xlabel = xlabel, legend = false, bottom_margin = 20px, left_margin = 12px)
+
+    for (i, sv) in enumerate(series_values)
+        rows = sort(filter(r -> r[seriescol] == sv, by_df), xcol)
+        isempty(rows) && continue
+        lbl = series_label_fn(sv)
+        plot!(p_flow, rows[!, xcol], rows.flowtime; label = lbl, color = colors[i], marker = :circle)
+        plot!(p_make, rows[!, xcol], rows.makespan; label = lbl, color = colors[i], marker = :circle)
+    end
+
+    # Shared legend lives in its own column so it can't steal width from either plot
+    p_legend = plot(legend = :left, framestyle = :none, grid = false, showaxis = false,
+                     legendfontsize = 14)
+    for (i, sv) in enumerate(series_values)
+        plot!(p_legend, [NaN], [NaN]; label = series_label_fn(sv), color = colors[i],
+              marker = :circle, markersize = 8, linewidth = 3)
+    end
+
+    combined = plot(p_flow, p_make, p_legend,
+                     # widths are fractions of total figure width for [flow, makespan, legend] —
+                     # they must sum to 1.0; raise the 3rd value (and lower the other two by the
+                     # same total) to make the legend column wider
+                     layout = Plots.grid(1, 3, widths = [0.4, 0.4, 0.2]),
+                     size = (1300, 520),
+                     plot_title = "$title_prefix — I/O $io")
+    savefig(combined, outfile)
+end
+
 # ─── Analysis 1: Impact of grid size ─────────────────────────────────────────
-# x-axis: grid_size (10..100), one line per n_items, averaged over escorts
+# x-axis: grid_size (10..100), one line per n_items (number of loads), averaged over escorts
 # Separate plot per io_position
 
 grid_sizes  = sort(unique(agg.grid_size))
-item_values = sort(unique(agg.n_items))
+load_values = sort(unique(agg.n_items))
 
 for io in ["left", "center"]
     sub = filter(r -> r.io_position == io, agg)
     # Average over n_escorts for this cut
-    by_grid_items = combine(
+    by_grid_loads = combine(
         groupby(sub, [:grid_size, :n_items]),
         :makespan      => mean => :makespan,
         :flowtime      => mean => :flowtime,
@@ -67,21 +103,27 @@ for io in ["left", "center"]
     for (metric, ylabel, fname) in METRICS
         p = base_plot(ylabel)
         plot!(p, xlabel = "Grid size (N×N)")
-        for (i, ni) in enumerate(item_values)
-            rows = sort(filter(r -> r.n_items == ni, by_grid_items), :grid_size)
+        for (i, nl) in enumerate(load_values)
+            rows = sort(filter(r -> r.n_items == nl, by_grid_loads), :grid_size)
             isempty(rows) && continue
             plot!(p, rows.grid_size, rows[!, metric];
-                  label     = "$ni items",
-                  color     = ITEM_COLORS[i],
+                  label     = "$nl loads",
+                  color     = LOAD_COLORS[i],
                   marker    = :circle,
             )
         end
-        title!(p, "$(titlecase(fname)) vs grid size — IO $(io)")
+        title!(p, "$(titlecase(fname)) vs grid size — I/O $(io)")
         savefig(p, joinpath(OUT_DIR, "gridsize_$(fname)_$(io).png"))
     end
 
     # Save aggregated table for this cut
-    CSV.write(joinpath(OUT_DIR, "gridsize_$(io).csv"), by_grid_items)
+    CSV.write(joinpath(OUT_DIR, "gridsize_$(io).csv"), by_grid_loads)
+
+    combined_flow_makespan_plot(
+        by_grid_loads, :grid_size, :n_items, load_values, LOAD_COLORS,
+        "Grid size (N×N)", nl -> "$nl loads", "Flow-time vs Makespan by grid size", io,
+        joinpath(OUT_DIR, "gridsize_combined_$(io).png"),
+    )
 end
 
 println("Grid-size plots done.")
@@ -113,12 +155,58 @@ for io in ["left", "center"]
                   marker = :circle,
             )
         end
-        title!(p, "$(titlecase(fname)) vs escorts — IO $(io)")
+        title!(p, "$(titlecase(fname)) vs escorts — I/O $(io)")
         savefig(p, joinpath(OUT_DIR, "escorts_$(fname)_$(io).png"))
     end
 
     CSV.write(joinpath(OUT_DIR, "escorts_$(io).csv"), by_escort_grid)
+
+    combined_flow_makespan_plot(
+        by_escort_grid, :n_escorts, :grid_size, grid_sizes, ESCORT_COLORS,
+        "Number of escorts", gs -> "$(gs)×$(gs)", "Flow-time vs Makespan by escorts", io,
+        joinpath(OUT_DIR, "escorts_combined_$(io).png"),
+    )
 end
 
 println("Escort plots done.")
+
+# ─── Analysis 3: Impact of number of loads ───────────────────────────────────
+# x-axis: n_items (number of loads, 2..10), one line per grid_size, averaged over escorts
+# Separate plot per io_position
+
+for io in ["left", "center"]
+    sub = filter(r -> r.io_position == io, agg)
+    by_loads_grid = combine(
+        groupby(sub, [:n_items, :grid_size]),
+        :makespan      => mean => :makespan,
+        :flowtime      => mean => :flowtime,
+        :comp_time_sec => mean => :comp_time_sec,
+    )
+
+    for (metric, ylabel, fname) in METRICS
+        p = base_plot(ylabel)
+        plot!(p, xlabel = "Number of loads")
+        for (i, gs) in enumerate(grid_sizes)
+            rows = sort(filter(r -> r.grid_size == gs, by_loads_grid), :n_items)
+            isempty(rows) && continue
+            plot!(p, rows.n_items, rows[!, metric];
+                  label  = "$(gs)×$(gs)",
+                  color  = GRID_COLORS[i],
+                  marker = :circle,
+            )
+        end
+        title!(p, "$(titlecase(fname)) vs loads — I/O $(io)")
+        savefig(p, joinpath(OUT_DIR, "loads_$(fname)_$(io).png"))
+    end
+
+    CSV.write(joinpath(OUT_DIR, "loads_$(io).csv"), by_loads_grid)
+
+    combined_flow_makespan_plot(
+        by_loads_grid, :n_items, :grid_size, grid_sizes, GRID_COLORS,
+        "Number of loads", gs -> "$(gs)×$(gs)", "Flow-time vs Makespan by loads", io,
+        joinpath(OUT_DIR, "loads_combined_$(io).png"),
+    )
+end
+
+println("Load plots done.")
 println("\nAll outputs in: $OUT_DIR")

@@ -5,7 +5,7 @@ using Plots
 using Plots.PlotMeasures
 
 const CSV_PATH = raw"C:\codestuff\PBS\testinstances_26\results_summary.csv"
-const OUT_DIR  = raw"C:\codestuff\PBS\pbsHeuristic\paperstuff"
+const OUT_DIR  = raw"C:\codestuff\PBS\paperplots"
 
 df = CSV.read(CSV_PATH, DataFrame)
 
@@ -21,8 +21,8 @@ item_values   = sort(unique(agg.n_items))
 escort_values = sort(unique(agg.n_escorts))
 
 METRICS = [
-    (:makespan,      "Makespan (steps)",       "makespan", :viridis),
-    (:flowtime,      "Flowtime (sum steps)",   "flowtime", :plasma),
+    (:makespan,      "Makespan",       "makespan", :viridis),
+    (:flowtime,      "Flowtime",   "flowtime", :plasma),
     (:comp_time_sec, "Computation time (s)",   "comptime", :inferno),
 ]
 
@@ -70,9 +70,9 @@ for (metric, zlabel, fname, cmap) in METRICS
     Z = build_surface(agg, grid_sizes, item_values, :grid_size, :n_items, metric)
     make_surface(
         grid_sizes, item_values, Z,
-        "Grid size (N)", "Number of items", zlabel,
+        "Grid size (N)", "Number of loads", zlabel,
         "$zlabel\n(averaged over escort counts)",
-        cmap, joinpath(OUT_DIR, "3d_gridsize_items_$(fname).png"),
+        cmap, joinpath(OUT_DIR, "3d_gridsize_loads_$(fname).png"),
     )
 end
 
@@ -80,11 +80,14 @@ end
 
 for (metric, zlabel, fname, cmap) in METRICS
     Z = build_surface(agg, grid_sizes, escort_values, :grid_size, :n_escorts, metric)
+    # Brighten the low end of the colormap: skip the darkest ~25% of the
+    # original palette so the low-value regions of the surface aren't as dark.
+    bright_cmap = cgrad([cgrad(cmap)[t] for t in range(0.3, 1.6, length=256)])
     make_surface(
         grid_sizes, escort_values, Z,
         "Grid size (N)", "Number of escorts", zlabel,
-        "$zlabel\n(averaged over item counts)",
-        cmap, joinpath(OUT_DIR, "3d_gridsize_escorts_$(fname).png"),
+        "$zlabel\n(averaged over load counts)",
+        bright_cmap, joinpath(OUT_DIR, "3d_gridsize_escorts_$(fname).png"),
     )
 end
 
@@ -94,9 +97,9 @@ for (metric, zlabel, fname, cmap) in METRICS
     Z = build_surface(agg, item_values, escort_values, :n_items, :n_escorts, metric)
     make_surface(
         item_values, escort_values, Z,
-        "Number of items", "Number of escorts", zlabel,
+        "Number of loads", "Number of escorts", zlabel,
         "$zlabel\n(averaged over grid sizes)",
-        cmap, joinpath(OUT_DIR, "3d_items_escorts_$(fname).png"),
+        cmap, joinpath(OUT_DIR, "3d_loads_escorts_$(fname).png"),
     )
 end
 

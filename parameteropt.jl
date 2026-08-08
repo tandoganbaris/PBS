@@ -6,7 +6,7 @@ using Statistics
 
 # ─── Config — tweak these to trade off runtime vs. confidence ────────────────
 const ALPHAS = [0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]  # candidate GRASP_ITEM_ALPHA values to try
-const NUM_INSTANCES = 30    # how many rows of the CSV to use (nothing = all rows)
+const NUM_INSTANCES = 100    # how many rows of the CSV to use (nothing = all rows)
 const REPS_PER_INSTANCE = 10 # GRASP replicate reps per instance per alpha (only matters if no_cores>1)
 const NO_CORES = Threads.nthreads()  # set via julia --threads N or JULIA_NUM_THREADS=N
 

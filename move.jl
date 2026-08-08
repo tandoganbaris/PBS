@@ -52,10 +52,14 @@ function PBSengine!(iteration, incumbentstate, batch, escorts, IO; obj="makespan
 
         # Quality proxy: lower is better.
         # Component 1 — total Manhattan distance of each item to its nearest IO (minimise).
-        # Component 2 — coverage bonus: for each (item, direction) pair where an escort
-        #   sits on the direct path from the item to its nearest IO, subtract one
-        #   average-distance unit. Each item contributes at most 1 per direction (X and
-        #   Y independently), so the maximum bonus is 2 × n_items × avg_dist.
+        # Component 2 — coverage discount: for each (item, direction) pair where an escort
+        #   sits on the direct path from the item to its nearest IO, the total distance is
+        #   discounted proportionally. Each item contributes at most 1 per direction (X and
+        #   Y independently), so the maximum coverage is 2 × n_items.
+        # COVERAGE_WEIGHT caps how much of the distance coverage can discount (< 1.0), so
+        # distance always stays the tiebreaker between two states with equal coverage —
+        # even at full coverage, a state is never fully indifferent to its own distance.
+        COVERAGE_WEIGHT = 0.9
         function step_quality(local_batch, local_escorts)
             escort_coords = Set(e.coords for e in values(local_escorts))
             total_dist = 0.0
@@ -80,8 +84,11 @@ function PBSengine!(iteration, incumbentstate, batch, escorts, IO; obj="makespan
             end
 
             n = length(local_batch)
-            avg_dist = n > 0 ? total_dist / n : 0.0
-            return total_dist - avg_dist * coverage   # higher coverage → lower (better) score
+            max_coverage = 2 * n   # each item contributes at most 1 per axis (X and Y)
+            coverage_frac = max_coverage > 0 ? coverage / max_coverage : 0.0
+            # (1 - COVERAGE_WEIGHT*coverage_frac) ∈ [1-COVERAGE_WEIGHT, 1], always > 0, so
+            # this never flips sign AND distance still breaks ties at equal coverage.
+            return total_dist * (1 - COVERAGE_WEIGHT * coverage_frac)
         end
 
         # Deep-copy sequentially BEFORE spawning threads to avoid concurrent deepcopy aliasing
@@ -934,10 +941,29 @@ function sort_keys_by_distance_and_sum(items, IO, relevant_items=nothing)
 end
 
 """
+Rank-biased GRASP pick: returns an index in 1:n with probability proportional to
+α^(i-1), where i=1 is the best-ranked candidate (first in a best-to-worst sort).
+α=1.0 → uniform over all n candidates. α→0 → collapses onto rank 1 (pure greedy).
+Smaller α makes earlier (better) ranks disproportionately more likely.
+"""
+function grasp_rank_pick(rng, n::Int, α::Float64)
+    n == 1 && return 1
+    weights = α == 1.0 ? ones(n) : [α^(i-1) for i in 1:n]
+    total = sum(weights)
+    r = rand(rng) * total
+    cum = 0.0
+    for i in 1:n
+        cum += weights[i]
+        r <= cum && return i
+    end
+    return n
+end
+
+"""
 GRASP version of sort_keys_by_distance_and_sum.
-At each step builds a Restricted Candidate List (RCL) of items whose distance to IO
-is within α of the current maximum distance, then picks uniformly at random from the RCL.
-α=0 → pure greedy (identical to original); α=1 → fully random.
+At each step, ranks the remaining items by distance to IO (furthest first) and picks
+one with probability proportional to α^(rank-1) via grasp_rank_pick.
+α=1.0 → uniform random choice; α→0 → always the furthest item (pure greedy).
 """
 function sort_keys_by_distance_and_sum_grasp(items, IO, α::Float64; relevant_items=nothing)
     if relevant_items === nothing
@@ -949,18 +975,11 @@ function sort_keys_by_distance_and_sum_grasp(items, IO, α::Float64; relevant_it
     result = String[]
     while !isempty(pool)
         # greedy metric: distance from IO (higher = better, we want furthest first)
-        dists = [euclidean_distance(items[k].coords, IO) for k in pool]
-        d_max = maximum(dists)
-        d_min = minimum(dists)
+        ranked = sort(pool, by = k -> -euclidean_distance(items[k].coords, IO))
 
-        # RANDOMIZATION: RCL contains all items within α-fraction of the best distance
-        # α=0 → only the single furthest item; α=1 → entire pool
-        threshold = d_max - α * (d_max - d_min)
-        rcl = [pool[i] for i in eachindex(pool) if dists[i] >= threshold]
-
-        # Break ties inside the RCL with escortssum (fewer = better), then pick randomly
-        # among ties at that escortssum level — the random pick is the core GRASP step
-        chosen = rcl[rand(Random.default_rng(), 1:length(rcl))]
+        # RANDOMIZATION: probability of picking rank i is proportional to α^(i-1)
+        idx = grasp_rank_pick(Random.default_rng(), length(ranked), α)
+        chosen = ranked[idx]
 
         push!(result, chosen)
         filter!(k -> k != chosen, pool)
@@ -970,10 +989,10 @@ end
 
 """
 GRASP version of the non-movers sort used in moveescorts_flow!.
-The sort key per escort is (distance_to_IO desc, empty_spaces_below asc).
-Builds an RCL of escorts whose distance to IO is within α of the furthest escort,
-then picks randomly from that RCL at each step.
-α=0 → pure greedy (same ordering as original); α=1 → fully random.
+The greedy metric is distance_to_IO (furthest first). At each step, ranks the
+remaining escorts by that metric and picks one with probability proportional to
+α^(rank-1) via grasp_rank_pick.
+α=1.0 → uniform random choice; α→0 → always the furthest escort (pure greedy).
 """
 function sort_nonmovers_grasp(nonmovers, escorts, items, matrix, blockmat, IO, α::Float64)
     pool = collect(nonmovers)
@@ -984,31 +1003,13 @@ function sort_nonmovers_grasp(nonmovers, escorts, items, matrix, blockmat, IO, �
         return euclidean_distance((esc_x, esc_y), IO)
     end
 
-    function empty_spaces_key(escortid)
-        esc_x, esc_y = escorts[escortid].coords
-        empty = 0
-        for y in esc_y-1:-1:1
-            if blockmat[esc_x, y] == 1 || haskey(items, matrix[esc_x, y]) || haskey(escorts, matrix[esc_x, y])
-                break
-            end
-            empty += 1
-        end
-        return empty
-    end
-
     result = String[]
     while !isempty(pool)
-        dists = [dist_key(e) for e in pool]
-        d_max = maximum(dists)
-        d_min = minimum(dists)
+        ranked = sort(pool, by = e -> -dist_key(e))
 
-        # RANDOMIZATION: RCL = escorts within α of the furthest distance from IO
-        threshold = d_max - α * (d_max - d_min)
-        rcl = [pool[i] for i in eachindex(pool) if dists[i] >= threshold]
-
-        # Secondary tie-break within RCL: fewer empty spaces below is better (greedy),
-        # but we do NOT sort the RCL — the random pick among RCL is the GRASP step
-        chosen = rcl[rand(Random.default_rng(), 1:length(rcl))]
+        # RANDOMIZATION: probability of picking rank i is proportional to α^(i-1)
+        idx = grasp_rank_pick(Random.default_rng(), length(ranked), α)
+        chosen = ranked[idx]
 
         push!(result, chosen)
         filter!(e -> e != chosen, pool)
@@ -1017,11 +1018,11 @@ function sort_nonmovers_grasp(nonmovers, escorts, items, matrix, blockmat, IO, �
 end
 
 """
-Multi-IO version of sort_nonmovers_grasp — the sort key per escort is
-(distance_to_nearest_IO desc, empty_spaces_below asc), mirroring the deterministic
-multi-IO nonmovers sort in moveescorts_flow_multi_io! but with a GRASP RCL + random
-pick instead of a plain sort.
-α=0 → pure greedy (same ordering as the deterministic version); α=1 → fully random.
+Multi-IO version of sort_nonmovers_grasp — the greedy metric per escort is
+distance_to_nearest_IO (furthest first), mirroring the deterministic multi-IO
+nonmovers sort in moveescorts_flow_multi_io! but with a rank-biased random pick
+instead of a plain sort.
+α=1.0 → uniform random choice; α→0 → always the furthest escort (pure greedy).
 """
 function sort_nonmovers_multi_io_grasp(nonmovers, escorts, items, matrix, blockmat, all_ios, α::Float64)
     pool = collect(nonmovers)
@@ -1033,15 +1034,11 @@ function sort_nonmovers_multi_io_grasp(nonmovers, escorts, items, matrix, blockm
 
     result = String[]
     while !isempty(pool)
-        dists = [dist_key(e) for e in pool]
-        d_max = maximum(dists)
-        d_min = minimum(dists)
+        ranked = sort(pool, by = e -> -dist_key(e))
 
-        # RANDOMIZATION: RCL = escorts within α of the furthest distance from their nearest IO
-        threshold = d_max - α * (d_max - d_min)
-        rcl = [pool[i] for i in eachindex(pool) if dists[i] >= threshold]
-
-        chosen = rcl[rand(Random.default_rng(), 1:length(rcl))]
+        # RANDOMIZATION: probability of picking rank i is proportional to α^(i-1)
+        idx = grasp_rank_pick(Random.default_rng(), length(ranked), α)
+        chosen = ranked[idx]
 
         push!(result, chosen)
         filter!(e -> e != chosen, pool)
@@ -1075,9 +1072,10 @@ end
 
 """
 GRASP version of sort_urgkeys_by_distance_toescort.
-At each step builds an RCL of urgent items within α of the best (closest/furthest)
-distance to the escort, then picks uniformly at random from the RCL.
-α=0 → pure greedy (identical to original); α=1 → fully random.
+At each step, ranks the remaining urgent items by distance to the escort
+(closest first if increasing, furthest first otherwise) and picks one with
+probability proportional to α^(rank-1) via grasp_rank_pick.
+α=1.0 → uniform random choice; α→0 → always the best-ranked item (pure greedy).
 increasing=true  → closest items first (escort goes to nearest urgent item).
 increasing=false → furthest items first.
 """
@@ -1086,21 +1084,14 @@ function sort_urgkeys_by_distance_toescort_grasp(items, urgkeys, esccoords, incr
     result = String[]
 
     while !isempty(pool)
-        dists = [euclidean_distance(items[k].coords, esccoords) for k in pool]
-        d_min, d_max = minimum(dists), maximum(dists)
+        ranked = increasing ?
+            sort(pool, by = k -> euclidean_distance(items[k].coords, esccoords)) :
+            sort(pool, by = k -> -euclidean_distance(items[k].coords, esccoords))
 
-        if increasing
-            # RANDOMIZATION: RCL = items within α of the closest distance
-            # α=0 → only the single nearest item; α=1 → entire pool
-            threshold = d_min + α * (d_max - d_min)
-            rcl = [pool[i] for i in eachindex(pool) if dists[i] <= threshold]
-        else
-            # RANDOMIZATION: RCL = items within α of the furthest distance
-            threshold = d_max - α * (d_max - d_min)
-            rcl = [pool[i] for i in eachindex(pool) if dists[i] >= threshold]
-        end
+        # RANDOMIZATION: probability of picking rank i is proportional to α^(i-1)
+        idx = grasp_rank_pick(Random.default_rng(), length(ranked), α)
+        chosen = ranked[idx]
 
-        chosen = rcl[rand(Random.default_rng(), 1:length(rcl))]
         push!(result, chosen)
         filter!(k -> k != chosen, pool)
     end
