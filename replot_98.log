@@ -1,0 +1,4 @@
+Warning: reached iteration limit without completing all items. Check for potential issues.
+=== 10x61_61_21_98  grid=61x10  n=1 kept=17/61  loads=21 ===
+makespan(cap300)=300
+remaining item positions (from a fresh replay):

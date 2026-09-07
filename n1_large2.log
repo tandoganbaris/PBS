@@ -1,0 +1,9 @@
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  FAIL 10x61_61_21_89   deadlock=true
+
+Large multi-IO  n=1 (idle-flex on):  solved 99/100
+  mean makespan = 51.79   mean moves = 736.27   mean cpu = 0.1876
+  failures: NamedTuple[(id = String15("10x61_61_21_89"), deadlock = true)]
+Done.

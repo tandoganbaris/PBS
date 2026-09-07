@@ -1,0 +1,5 @@
+┌ Warning: Running on 1 thread. Start Julia with --threads N for parallel execution.
+└ @ Main C:\codestuff\PBS\pbsHeuristic\test.jl:8
+Using 1 threads for parallel execution.
+Test Summary: | Time
+CSV Rows      | None  53.3s

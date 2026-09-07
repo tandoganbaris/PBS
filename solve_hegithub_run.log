@@ -1,0 +1,22 @@
+Warming up...
+Warm-up done.
+
+[Gue_vs_RL_formatted.csv] Processed 35 / 35
+Wrote C:\codestuff\PBS\HeGithub\Gue_vs_RL_formatted.csv
+
+[Yalcin_vs_RL_formatted.csv] Processed 250 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 500 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 750 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 1000 / 3000
+INST20_T2: escorts=Dict("E2" => (1, 2), "E1" => (3, 3)) items=Dict("I1" => (4, 2)) movers=["E2"] blockmat_col3=[0, 0, 0, 0, 0, 0]
+[Yalcin_vs_RL_formatted.csv] Processed 1250 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 1500 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 1750 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 2000 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 2250 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 2500 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 2750 / 3000
+[Yalcin_vs_RL_formatted.csv] Processed 3000 / 3000
+Wrote C:\codestuff\PBS\HeGithub\Yalcin_vs_RL_formatted.csv
+
+All done.

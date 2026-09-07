@@ -1,0 +1,45 @@
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done Medium_scale_RL_6_37_13_22_formatted.csv
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done Large_scale_RL_10_61_21_61_formatted.csv
+
+=== Medium_scale_RL_6_37_13_22_formatted.csv ===
+  thispaper   solved 98/100   mk=21.99  moves=310.9
+  n1          solved 98/100   mk=33.94  moves=254.11
+  n2          solved 98/100   mk=24.42  moves=280.3
+  n3          solved 98/100   mk=22.0  moves=303.88
+  n4          solved 98/100   mk=21.62  moves=322.45
+  postproc    solved 98/100   mk=22.11  moves=286.26
+
+=== Large_scale_RL_10_61_21_61_formatted.csv ===
+  thispaper   solved 99/100   mk=35.07  moves=1275.28
+  n1          solved 97/100   mk=50.58  moves=711.08
+  n2          solved 99/100   mk=36.0  moves=862.72
+  n3          solved 99/100   mk=34.83  moves=1032.28
+  n4          solved 99/100   mk=34.3  moves=1148.23
+  postproc    solved 99/100   mk=34.98  moves=1142.01
+
+Done.

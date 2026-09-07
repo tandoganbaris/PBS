@@ -1,0 +1,38 @@
+Warning: reached iteration limit without completing all items. Check for potential issues.
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+[30/30] orig conv=19  grad conv=20
+
+wrote C:\codestuff\PBS\ab_raviv_freeroam_results.csv
+
+=== SUMMARY (n=30) ===
+converged:            orig=19   grad=20
+both converged:       19
+on both-converged instances:
+  total moves:    orig=2088   grad=2104   (grad/orig = 1.0077)
+  total makespan: orig=375   grad=348   (grad/orig = 0.928)
+  moves head-to-head:    grad<orig:4  grad=orig:0  grad>orig:15
+  makespan head-to-head: grad<orig:7  grad=orig:9  grad>orig:3
+converged only under orig: 0
+converged only under grad: 1

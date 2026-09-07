@@ -1,0 +1,18 @@
+warmup done
+
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  (200 instances)
+  [20/200]
+  [40/200]
+  [60/200]
+  [80/200]
+  [100/200]
+  [120/200]
+  [140/200]
+  [160/200]
+  [180/200]
+  [200/200]
+  wrote C:\codestuff\PBS\HeGithub\Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv   converged 200/200   excluded 0   errors 0
+
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  (200 instances)
+  [20/200]
+  [40/200]

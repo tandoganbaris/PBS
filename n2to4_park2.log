@@ -1,0 +1,25 @@
+warmup done
+
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=2 (park=2)  converged=200/200  mk=31.36  moves=61.12
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=3 (park=2)  converged=200/200  mk=29.92  moves=81.54
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=4 (park=2)  converged=200/200  mk=29.14  moves=100.15
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=2 (park=2)  converged=200/200  mk=45.38  moves=89.28
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=3 (park=2)  converged=200/200  mk=43.46  moves=120.3
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=4 (park=2)  converged=200/200  mk=43.12  moves=149.51
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=2 (park=2)  converged=98/100  mk=25.68  moves=291.34
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=3 (park=2)  converged=98/100  mk=23.44  moves=318.77
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=4 (park=2)  converged=98/100  mk=23.07  moves=339.39
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=2 (park=2)  converged=99/100  mk=38.41  moves=913.03
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=3 (park=2)  converged=99/100  mk=35.75  moves=1050.21
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=4 (park=2)  converged=99/100  mk=34.85  moves=1142.46
+
+Done.

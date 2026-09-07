@@ -6,7 +6,7 @@ using DataFrames
 const NO_CORES = Threads.nthreads()  # set via julia --threads N or JULIA_NUM_THREADS=N
 println("Using $NO_CORES threads for parallel execution.")
 Threads.nthreads() == 1 && @warn "Running on 1 thread. Start Julia with --threads N for parallel execution."
-const REPS_PER_ROW = NO_CORES > 1 ? 5 : 1
+const REPS_PER_ROW = NO_CORES > 1 ? 15 : 1
 
 # Helper function to parse coordinate strings like "{<1 5> <2 6>...}"
 using CSV
@@ -28,11 +28,23 @@ function parse_coords(coord_str)
 end
 
 @testset "CSV Rows" begin
-    df =  CSV.read(raw"C:\codestuff\PBS\bm_4l_10x10_1IO_2.csv", DataFrame)
+    #df =  CSV.read(raw"C:\codestuff\PBS\bm_4l_10x10_1IO_2.csv", DataFrame)
+    df = CSV.read(raw"C:\codestuff\PBS\FourLoads_escortflow.csv", DataFrame)
      #CSV.read(raw"C:\codestuff\PBS\bm_4l_MIO.csv", DataFrame) #
     #df = filter(r -> !ismissing(r[:id]) && r[:id] == "27_20_4_47", df)
 
     rename!(df, strip.(names(df)))
+
+    # This CSV has no "id" column (unlike bm_4l_10x10_1IO_2.csv) — synthesize one
+    # in the same "<Lx x Ly>_<escorts>_<loads>_<seed>" style so the rest of the
+    # script (which references row[:id]) works unchanged.
+    if !("id" in names(df))
+        df.id = [
+            "$(strip(row[Symbol("Lx x Ly")]))_$(strip(string(row[Symbol("# Escorts")])))_" *
+            "$(strip(string(row[Symbol("#Loads")])))_$(strip(string(row.seed)))"
+            for row in eachrow(df)
+        ]
+    end
 
     # Arrays to store heuristics
     makespan_heuristics = Union{Float64,Missing}[]
@@ -58,6 +70,7 @@ end
         end
         escort_coords = parse_coords(row[:Escorts])
         item_coords = parse_coords(row[Symbol("Target Loads")])
+        retrieval_mode = lowercase(strip(string(row[Symbol("Retrieval Mode")])))
 
         global saveplot = false
 
@@ -102,7 +115,8 @@ end
                     initialstate, items, escorts,
                     IO_coords,
                     1,
-                    folder_path, n=4, no_cores=NO_CORES
+                    folder_path, n=4, no_cores=NO_CORES, mode=retrieval_mode,
+                    deterministic_anchor=(rep == 1)
                 )
                 makespandict, makespan
             catch e
@@ -143,5 +157,5 @@ end
     df[!, :flowtime_heuristic] = average_dict_heuristics
 
     # Write updated CSV
-    CSV.write(raw"C:\codestuff\PBS\outputtestn4_2.csv", df)
+    CSV.write(raw"C:\codestuff\PBS\4loadstestleaveP2.csv", df)
 end

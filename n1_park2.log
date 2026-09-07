@@ -1,0 +1,11 @@
+warmup done
+
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=1  converged=200/200  mk=46.02  moves=46.02
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=1  converged=200/200  mk=68.04  moves=68.04
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=1  converged=98/100  mk=36.73  moves=268.54
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=1  converged=99/100  mk=56.21  moves=754.32
+
+Done.

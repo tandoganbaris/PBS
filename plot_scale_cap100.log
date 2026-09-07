@@ -1,0 +1,12 @@
+=== 6x37_22_13_8  grid=37x6  #esc=22  #loads=13  cap=100 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_8 : iters=100  escort_relocs=323  -> C:\codestuff\PBS\plots_scale_cap100\6x37_22_13_8
+=== 6x37_22_13_94  grid=37x6  #esc=22  #loads=13  cap=100 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_94 : iters=100  escort_relocs=379  -> C:\codestuff\PBS\plots_scale_cap100\6x37_22_13_94
+=== 10x61_61_21_64  grid=61x10  #esc=61  #loads=21  cap=100 ===
+10x61_61_21_64 : iters=43  escort_relocs=1243  -> C:\codestuff\PBS\plots_scale_cap100\10x61_61_21_64
+=== 10x61_61_21_89  grid=61x10  #esc=61  #loads=21  cap=100 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_89 : iters=100  escort_relocs=1045  -> C:\codestuff\PBS\plots_scale_cap100\10x61_61_21_89
+Done.

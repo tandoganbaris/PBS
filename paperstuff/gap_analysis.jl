@@ -1,8 +1,8 @@
 using CSV, DataFrames, Statistics, Printf
 using StatsPlots, Plots
 
-df = CSV.read(raw"C:\codestuff\PBS\outputtestn4_2.csv", DataFrame)
-
+df  = CSV.read(raw"C:\codestuff\PBS\4loadstestleave.csv", DataFrame)
+df2 = CSV.read(raw"C:\codestuff\PBS\4loadstestleaveP2.csv", DataFrame)
 # ── Filter: only rows where ILP found a feasible solution ─────────────────────
 function pos_num(v)
     ismissing(v) && return false
@@ -12,14 +12,27 @@ function pos_num(v)
 end
 df = filter(row -> pos_num(row[Symbol("ILP makespan")]) && pos_num(row[Symbol("ILP flowtime")]), df)
 
+# ── Take the best (lowest) heuristic result per row, across df and df2 ────────
+# df2 is a second heuristic run of the same instances (parallel/randomized);
+# for each id, keep whichever of df/df2 scored lower on each metric.
+ms_lookup = Dict(zip(df2.id, df2.makespan_heuristic))
+ft_lookup = Dict(zip(df2.id, df2.flowtime_heuristic))
+df.makespan_heuristic = [haskey(ms_lookup, id) ? min(v, ms_lookup[id]) : v
+                          for (id, v) in zip(df.id, df.makespan_heuristic)]
+df.flowtime_heuristic = [haskey(ft_lookup, id) ? min(v, ft_lookup[id]) : v
+                          for (id, v) in zip(df.id, df.flowtime_heuristic)]
+
 # ── Compute percentage gaps ───────────────────────────────────────────────────
 ilp_ms  = parse.(Float64, string.(df[!, Symbol("ILP makespan")]))
 ilp_ft  = parse.(Float64, string.(df[!, Symbol("ILP flowtime")]))
 df.makespan_gap = (df.makespan_heuristic .- ilp_ms) ./ ilp_ms .* 100
 df.flowtime_gap = (df.flowtime_heuristic .- ilp_ft) ./ ilp_ft .* 100
 
-escorts_col = df[!, Symbol("# Escorts")]
-println("Feasible rows: $(nrow(df))  |  Escort counts: $(sort(unique(escorts_col)))")
+# ── Category: grid size (Lx x Ly), ordered by (Lx, Ly) ────────────────────────
+gridkey(s) = (p = parse.(Int, split(strip(String(s)), 'x')); (p[1], p[2]))
+df.grid = strip.(String.(df[!, Symbol("Lx x Ly")]))
+grid_groups = sort(unique(df.grid), by = gridkey)
+println("Feasible rows: $(nrow(df))  |  Grid sizes: $(grid_groups)")
 println()
 
 # ── Build summary table ───────────────────────────────────────────────────────
@@ -31,27 +44,29 @@ function gap_stats(v)
             q25=q[1], med=q[2], q75=q[3], max=maximum(v))
 end
 
-escort_groups = sort(unique(df[!, Symbol("# Escorts")]))
 metrics = [("Makespan gap %", :makespan_gap), ("Flowtime gap %", :flowtime_gap)]
 
-# ── Plot: grouped box plots, one box per escort count per metric ───────────────
-esc_labels  = string.(escort_groups)
-ms_data     = [df[df[!, Symbol("# Escorts")] .== e, :makespan_gap] for e in escort_groups]
-ft_data     = [df[df[!, Symbol("# Escorts")] .== e, :flowtime_gap] for e in escort_groups]
+# ── Plot: grouped box plots, one box per grid size per metric ─────────────────
+grid_labels = string.(grid_groups)
+ms_data     = [df[df.grid .== g, :makespan_gap] for g in grid_groups]
+ft_data     = [df[df.grid .== g, :flowtime_gap] for g in grid_groups]
 
-# Build x-positions with a small offset so makespan and flowtime boxes sit side-by-side
-xs_ms = Float64.(1:length(escort_groups)) .- 0.2
-xs_ft = Float64.(1:length(escort_groups)) .+ 0.2
+xs_ms = Float64.(1:length(grid_groups)) .- 0.2
+xs_ft = Float64.(1:length(grid_groups)) .+ 0.2
 
 p = plot(
-    title  = "Heuristic vs ILP gap by escort count (10x10, 4 loads, M IO)",
+    title  = "Heuristic vs ILP gap by grid size",
     ylabel = "Gap (%)",
-    xlabel = "Number of escorts",
+    xlabel = "Grid size",
     legend = :topright,
-    xticks = (1:length(escort_groups), esc_labels),
+    xticks = (1:length(grid_groups), grid_labels),
     size   = (800, 500),
     grid   = true,
     gridalpha = 0.3,
+    left_margin   = 8Plots.mm,
+    bottom_margin = 8Plots.mm,
+    right_margin  = 5Plots.mm,
+    top_margin    = 5Plots.mm,
 )
 
 for (i, (xpos, data)) in enumerate(zip(xs_ms, ms_data))
@@ -79,27 +94,38 @@ end
 display(p)
 outdir = raw"C:\codestuff\PBS\paperplots"
 mkpath(outdir)
-#savefig(joinpath(outdir, "gap_analysismio.png"))
+savefig(joinpath(outdir, "gap_analysis_bygrid.png"))
 
+summary_rows = NamedTuple[]
 for (metric_name, col) in metrics
     println("═"^78)
     println("  $metric_name")
     println("═"^78)
     @printf("  %-10s  %5s  %7s  %7s  %7s  %7s  %7s  %7s\n",
-            "Escorts", "n", "Mean", "Min", "Q25", "Median", "Q75", "Max")
+            "Grid", "n", "Mean", "Min", "Q25", "Median", "Q75", "Max")
     println("  " * "-"^74)
-    for esc in escort_groups
-        sub = df[df[!, Symbol("# Escorts")] .== esc, col]
+    for g in grid_groups
+        sub = df[df.grid .== g, col]
         s = gap_stats(sub)
         s.n == 0 && continue
-        @printf("  %-10d  %5d  %7.1f  %7.1f  %7.1f  %7.1f  %7.1f  %7.1f\n",
-                esc, s.n, s.mean, s.min, s.q25, s.med, s.q75, s.max)
+        @printf("  %-10s  %5d  %7.2f  %7.2f  %7.2f  %7.2f  %7.2f  %7.2f\n",
+                g, s.n, s.mean, s.min, s.q25, s.med, s.q75, s.max)
+        push!(summary_rows, (metric = metric_name, grid = g, n = s.n,
+                              mean = s.mean, min = s.min, q25 = s.q25, median = s.med,
+                              q75 = s.q75, max = s.max))
     end
     println()
 
     # Overall row
     s = gap_stats(df[:, col])
-    @printf("  %-10s  %5d  %7.1f  %7.1f  %7.1f  %7.1f  %7.1f  %7.1f\n",
+    @printf("  %-10s  %5d  %7.2f  %7.2f  %7.2f  %7.2f  %7.2f  %7.2f\n",
             "ALL", s.n, s.mean, s.min, s.q25, s.med, s.q75, s.max)
+    push!(summary_rows, (metric = metric_name, grid = "ALL", n = s.n,
+                          mean = s.mean, min = s.min, q25 = s.q25, median = s.med,
+                          q75 = s.q75, max = s.max))
     println()
 end
+
+summary_df = DataFrame(summary_rows)
+CSV.write(joinpath(outdir, "gap_analysis_summary_bygrid.csv"), summary_df)
+println("wrote $(joinpath(outdir, "gap_analysis_summary_bygrid.csv"))")

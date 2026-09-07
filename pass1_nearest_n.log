@@ -1,0 +1,58 @@
+warmup done
+
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  full escorts  converged=200/200  mk=21.69  moves=299.5
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=1  converged=200/200  mk=46.02  moves=46.02
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=2  converged=200/200  mk=31.36  moves=61.12
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=3  converged=200/200  mk=29.92  moves=81.54
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  n=4  converged=200/200  mk=29.14  moves=100.15
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  full escorts  converged=200/200  mk=32.57  moves=1076.0
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=1  converged=200/200  mk=68.04  moves=68.04
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=2  converged=200/200  mk=45.38  moves=89.28
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=3  converged=200/200  mk=43.46  moves=120.3
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  n=4  converged=200/200  mk=43.12  moves=149.51
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  full escorts  converged=98/100  mk=23.06  moves=323.51
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=1  converged=91/100  mk=36.99  moves=253.18
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=2  converged=97/100  mk=26.62  moves=280.46
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=3  converged=98/100  mk=24.32  moves=300.05
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  n=4  converged=98/100  mk=23.68  moves=316.37
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  full escorts  converged=99/100  mk=35.8  moves=1287.92
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=1  converged=88/100  mk=57.12  moves=730.52
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=2  converged=99/100  mk=39.17  moves=873.75
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=3  converged=99/100  mk=35.96  moves=977.54
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  n=4  converged=99/100  mk=35.69  moves=1086.87
+
+Done. Wrote pass1_nearest_n_summary.csv and pass1_nearest_n_failures.csv

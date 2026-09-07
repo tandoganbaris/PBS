@@ -1,0 +1,21 @@
+=== 6x6_1_2_9  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (2, 4)]  (RL mk=32)
+6x6_1_2_9 : iters=52 moves=52  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_9
+=== 6x6_1_2_18  grid=7x7  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (2, 7)]  (RL mk=46)
+6x6_1_2_18 : iters=68 moves=68  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_18
+=== 6x6_1_2_31  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (2, 5)]  (RL mk=36)
+6x6_1_2_31 : iters=56 moves=56  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_31
+=== 6x6_1_2_50  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (3, 6)]  (RL mk=40)
+6x6_1_2_50 : iters=60 moves=60  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_50
+=== 6x6_1_2_51  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (2, 4)]  (RL mk=32)
+6x6_1_2_51 : iters=52 moves=52  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_51
+=== 6x6_1_2_62  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 4), (2, 5)]  (RL mk=38)
+6x6_1_2_62 : iters=58 moves=58  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_62
+=== 6x6_1_2_70  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (2, 6)]  (RL mk=40)
+6x6_1_2_70 : iters=62 moves=62  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_70
+=== 6x6_1_2_83  grid=7x7  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (2, 7)]  (RL mk=46)
+6x6_1_2_83 : iters=68 moves=68  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_83
+=== 6x6_1_2_147  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (2, 5)]  (RL mk=36)
+6x6_1_2_147 : iters=56 moves=56  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_147
+=== 6x6_1_2_175  grid=7x6  IO=[(7, 1), (6, 1)]  E=[(6, 2)]  I=[(1, 2), (3, 5)]  (RL mk=34)
+6x6_1_2_175 : iters=54 moves=54  -> C:\codestuff\PBS\plots_mirzaei_worst\6x6_1_2_175
+Done.

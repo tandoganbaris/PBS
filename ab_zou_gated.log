@@ -1,0 +1,51 @@
+warmup done
+
+>>> Zou  (3000 instances)
+  [200/3000]
+  [400/3000]
+  [600/3000]
+  [800/3000]
+  [1000/3000]
+  [1200/3000]
+  [1400/3000]
+  [1600/3000]
+  [1800/3000]
+  [2000/3000]
+  [2200/3000]
+  [2400/3000]
+  [2600/3000]
+  [2800/3000]
+  [3000/3000]
+
+wrote C:\codestuff\PBS\ab_zou_gated_results.csv
+
+========== PER SET ==========
+── Zou  (n=3000)
+   converged:  orig=3000   grad=3000   (only orig: 0, only grad: 0)
+   both-conv (3000): moves orig=103934 grad=105414 RL=94733 | makespan orig=62627 grad=63168
+      moves h2h  grad</=/> orig: 439/1875/686
+   CPU: orig=13.0s grad=7.2s
+
+========== ("Yalcin", "Zou") BY (#IO,#ESC) ==========
+── Zou  nesc=1  (n=1000)
+   converged:  orig=1000   grad=1000   (only orig: 0, only grad: 0)
+   both-conv (1000): moves orig=29902 grad=29912 RL=34720 | makespan orig=29977 grad=29989
+      moves h2h  grad</=/> orig: 0/996/4
+   CPU: orig=8.3s grad=2.5s
+── Zou  nesc=2  (n=1000)
+   converged:  orig=1000   grad=1000   (only orig: 0, only grad: 0)
+   both-conv (1000): moves orig=34148 grad=34843 RL=31236 | makespan orig=17940 grad=18255
+      moves h2h  grad</=/> orig: 146/549/305
+   CPU: orig=2.3s grad=2.4s
+── Zou  nesc=3  (n=1000)
+   converged:  orig=1000   grad=1000   (only orig: 0, only grad: 0)
+   both-conv (1000): moves orig=39884 grad=40659 RL=28777 | makespan orig=14710 grad=14924
+      moves h2h  grad</=/> orig: 293/330/377
+   CPU: orig=2.4s grad=2.4s
+
+========== OVERALL ==========
+── ALL  (n=3000)
+   converged:  orig=3000   grad=3000   (only orig: 0, only grad: 0)
+   both-conv (3000): moves orig=103934 grad=105414 RL=94733 | makespan orig=62627 grad=63168
+      moves h2h  grad</=/> orig: 439/1875/686
+   CPU: orig=13.0s grad=7.2s

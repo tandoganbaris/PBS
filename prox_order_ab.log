@@ -1,0 +1,14 @@
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  prox=false  conv=98/100  mk=23.06  moves=323.51
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  prox=true  conv=98/100  mk=22.66  moves=316.81
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  prox=false  conv=99/100  mk=35.8  moves=1287.92
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  prox=true  conv=99/100  mk=35.13  moves=1280.27
+
+Done.

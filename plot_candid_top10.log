@@ -1,0 +1,21 @@
+=== 10x61_61_21_27  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_27 : iters=44  escort_relocs=1639  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_27
+=== 10x61_61_21_47  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_47 : iters=46  escort_relocs=1679  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_47
+=== 10x61_61_21_100  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_100 : iters=48  escort_relocs=1872  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_100
+=== 10x61_61_21_72  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_72 : iters=40  escort_relocs=1638  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_72
+=== 10x61_61_21_52  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_52 : iters=37  escort_relocs=1551  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_52
+=== 10x61_61_21_79  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_79 : iters=38  escort_relocs=1378  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_79
+=== 10x61_61_21_97  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_97 : iters=35  escort_relocs=1316  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_97
+=== 10x61_61_21_9  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_9 : iters=39  escort_relocs=1507  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_9
+=== 10x61_61_21_88  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_88 : iters=38  escort_relocs=1585  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_88
+=== 10x61_61_21_21  grid=61x10  #esc=61  #loads=21 ===
+10x61_61_21_21 : iters=34  escort_relocs=1310  -> C:\codestuff\PBS\plots_candid_top10\10x61_61_21_21
+Done.

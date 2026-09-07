@@ -1,0 +1,8 @@
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  ours_solved=98  rl_solved=100  both=98   W/T/L (makespan, ours vs RL) = 98 / 0 / 0
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  ours_solved=99  rl_solved=100  both=99   W/T/L (makespan, ours vs RL) = 99 / 0 / 0
+Done.

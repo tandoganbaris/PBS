@@ -1,0 +1,30 @@
+warmup done
+
+>>> Gue  (35 instances)
+  [35/35]
+  wrote C:\codestuff\PBS\HeGithub\Gue_vs_RL_formatted.csv   converged 35/35   errors 0
+
+>>> Mirzaei  (200 instances)
+  [200/200]
+  wrote C:\codestuff\PBS\HeGithub\Mirzaei_vs_RL_formatted.csv   converged 200/200   errors 0
+
+>>> Yalcin  (3000 instances)
+  [500/3000]
+  [1000/3000]
+INST20_T2: escorts=Dict("E2" => (1, 2), "E1" => (3, 3)) items=Dict("I1" => (4, 2)) movers=["E2"] blockmat_col3=[0, 0, 0, 0, 0, 0]
+  [1500/3000]
+  [2000/3000]
+  [2500/3000]
+  [3000/3000]
+  wrote C:\codestuff\PBS\HeGithub\Yalcin_vs_RL_formatted.csv   converged 3000/3000   errors 0
+
+>>> Zou  (3000 instances)
+  [500/3000]
+  [1000/3000]
+  [1500/3000]
+  [2000/3000]
+  [2500/3000]
+  [3000/3000]
+  wrote C:\codestuff\PBS\HeGithub\Zou_vs_RL_formatted.csv   converged 3000/3000   errors 0
+
+Done.

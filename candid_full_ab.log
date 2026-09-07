@@ -1,0 +1,9 @@
+warmup done
+
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  mode=0  conv=200/200  mk=21.69  moves=299.5  events=0.0
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  mode=1  conv=200/200  mk=21.69  moves=299.5  events=0.0
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  mode=2  conv=200/200  mk=21.69  moves=299.5  events=0.0
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  mode=3  conv=200/200  mk=21.69  moves=299.5  events=0.0
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  mode=0  conv=200/200  mk=32.57  moves=1076.0  events=0.0
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  mode=1  conv=200/200  mk=32.57  moves=1076.0  events=0.0
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  mode=2  conv=200/200  mk=32.57  moves=1076.0  events=0.0

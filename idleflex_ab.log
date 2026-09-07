@@ -1,0 +1,45 @@
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [baseline] Medium_scale_RL_6_37_13_22_formatted.csv flex=false
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [baseline] Medium_scale_RL_6_37_13_22_formatted.csv flex=true
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [baseline] Large_scale_RL_10_61_21_61_formatted.csv flex=false
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [baseline] Large_scale_RL_10_61_21_61_formatted.csv flex=true
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [n=1] Medium_scale_RL_6_37_13_22_formatted.csv flex=false
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [n=1] Medium_scale_RL_6_37_13_22_formatted.csv flex=true
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [n=1] Large_scale_RL_10_61_21_61_formatted.csv flex=false
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+done [n=1] Large_scale_RL_10_61_21_61_formatted.csv flex=true
+
+=== [baseline] Medium_scale_RL_6_37_13_22_formatted.csv   solved off=98/100  on=98/100   common=98 ===
+  flex=false   common-mk=22.15  common-moves=312.54
+  flex=true   common-mk=21.99  common-moves=310.9
+
+=== [baseline] Large_scale_RL_10_61_21_61_formatted.csv   solved off=99/100  on=99/100   common=99 ===
+  flex=false   common-mk=35.08  common-moves=1268.86
+  flex=true   common-mk=35.07  common-moves=1275.28
+
+=== [n=1] Medium_scale_RL_6_37_13_22_formatted.csv   solved off=97/100  on=98/100   common=97 ===
+  flex=false   common-mk=35.16  common-moves=258.88
+  flex=true   common-mk=33.71  common-moves=253.69
+
+=== [n=1] Large_scale_RL_10_61_21_61_formatted.csv   solved off=97/100  on=97/100   common=96 ===
+  flex=false   common-mk=50.95  common-moves=716.21
+  flex=true   common-mk=50.4  common-moves=711.97
+
+Done.

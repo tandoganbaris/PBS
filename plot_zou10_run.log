@@ -1,0 +1,31 @@
+=== 6x6_1_2_3  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(4, 2)]  I=[(1, 4), (6, 6)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_3 : iterations=200  moves=31  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_3)
+=== 6x6_1_2_7  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(2, 5)]  I=[(5, 5), (2, 3)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_7 : iterations=200  moves=20  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_7)
+=== 6x6_1_2_8  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(1, 4)]  I=[(2, 5), (3, 3)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_8 : iterations=200  moves=14  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_8)
+=== 6x6_1_2_9  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(3, 4)]  I=[(1, 6), (2, 4)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_9 : iterations=200  moves=6  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_9)
+=== 6x6_1_2_11  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(1, 4)]  I=[(5, 5), (1, 1)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_11 : iterations=200  moves=22  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_11)
+=== 6x6_1_2_12  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(4, 6)]  I=[(5, 6), (2, 1)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_12 : iterations=200  moves=19  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_12)
+=== 6x6_1_2_18  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(4, 5)]  I=[(4, 3), (1, 5)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_18 : iterations=200  moves=18  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_18)
+=== 6x6_1_2_19  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(2, 6)]  I=[(2, 3), (3, 4)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_19 : iterations=200  moves=11  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_19)
+=== 6x6_1_2_23  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(2, 2)]  I=[(2, 5), (6, 4)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_23 : iterations=200  moves=29  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_23)
+=== 6x6_1_2_27  grid=6x6  IOs=[(1, 1), (1, 6)]  E=[(5, 1)]  I=[(3, 5), (2, 1)]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x6_1_2_27 : iterations=200  moves=17  (plots -> C:\codestuff\PBS\plots_zou10\6x6_1_2_27)
+Done.

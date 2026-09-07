@@ -1,0 +1,64 @@
+=== 6x37_22_13_5  grid=37x6  n=1 escorts kept=8/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_5 : iters=200  escort_relocs=291  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_5
+=== 6x37_22_13_8  grid=37x6  n=1 escorts kept=9/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_8 : iters=200  escort_relocs=164  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_8
+=== 6x37_22_13_29  grid=37x6  n=1 escorts kept=8/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_29 : iters=200  escort_relocs=150  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_29
+=== 6x37_22_13_47  grid=37x6  n=1 escorts kept=9/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_47 : iters=200  escort_relocs=267  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_47
+=== 6x37_22_13_51  grid=37x6  n=1 escorts kept=10/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_51 : iters=200  escort_relocs=264  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_51
+=== 6x37_22_13_84  grid=37x6  n=1 escorts kept=9/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_84 : iters=200  escort_relocs=316  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_84
+=== 6x37_22_13_88  grid=37x6  n=1 escorts kept=10/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_88 : iters=200  escort_relocs=206  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_88
+=== 6x37_22_13_94  grid=37x6  n=1 escorts kept=9/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_94 : iters=200  escort_relocs=391  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_94
+=== 6x37_22_13_99  grid=37x6  n=1 escorts kept=10/22  loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_99 : iters=200  escort_relocs=228  -> C:\codestuff\PBS\plots_nearest1_failures\6x37_22_13_99
+=== 10x61_61_21_5  grid=61x10  n=1 escorts kept=15/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_5 : iters=200  escort_relocs=731  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_5
+=== 10x61_61_21_6  grid=61x10  n=1 escorts kept=16/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_6 : iters=200  escort_relocs=745  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_6
+=== 10x61_61_21_10  grid=61x10  n=1 escorts kept=18/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_10 : iters=200  escort_relocs=704  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_10
+=== 10x61_61_21_25  grid=61x10  n=1 escorts kept=17/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_25 : iters=200  escort_relocs=596  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_25
+=== 10x61_61_21_27  grid=61x10  n=1 escorts kept=16/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_27 : iters=200  escort_relocs=902  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_27
+=== 10x61_61_21_35  grid=61x10  n=1 escorts kept=15/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_35 : iters=200  escort_relocs=695  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_35
+=== 10x61_61_21_37  grid=61x10  n=1 escorts kept=18/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_37 : iters=200  escort_relocs=722  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_37
+=== 10x61_61_21_47  grid=61x10  n=1 escorts kept=18/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_47 : iters=200  escort_relocs=845  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_47
+=== 10x61_61_21_62  grid=61x10  n=1 escorts kept=14/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_62 : iters=200  escort_relocs=749  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_62
+=== 10x61_61_21_84  grid=61x10  n=1 escorts kept=15/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_84 : iters=200  escort_relocs=772  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_84
+=== 10x61_61_21_85  grid=61x10  n=1 escorts kept=20/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_85 : iters=200  escort_relocs=702  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_85
+=== 10x61_61_21_89  grid=61x10  n=1 escorts kept=15/61  loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_89 : iters=200  escort_relocs=660  -> C:\codestuff\PBS\plots_nearest1_failures\10x61_61_21_89
+Done.

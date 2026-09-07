@@ -1,0 +1,24 @@
+warmup done
+
+[25/200] orig conv=25  grad conv=25
+[50/200] orig conv=50  grad conv=50
+[75/200] orig conv=75  grad conv=75
+[100/200] orig conv=100  grad conv=100
+[125/200] orig conv=125  grad conv=125
+[150/200] orig conv=150  grad conv=150
+[175/200] orig conv=175  grad conv=175
+[200/200] orig conv=200  grad conv=200
+
+wrote C:\codestuff\PBS\ab_mirzaei_freeroam_results.csv
+
+=== SUMMARY (n=200, LM mode, cap 1000) ===
+converged:   orig=200/200   grad=200/200
+both converged: 200
+both-converged totals:
+  moves     orig=9412  grad=9412  RL=6460
+  makespan  orig=9412  grad=9412
+  moves h2h:    grad<orig:0  =:200  grad>orig:0
+  makespan h2h: grad<orig:0  =:200  grad>orig:0
+converged only under orig: 0
+converged only under grad: 0
+total CPU: orig=0.7s  grad=0.7s

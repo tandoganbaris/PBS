@@ -48,46 +48,61 @@ end
 function atIO( item, IO)
     return item.coords == IO
 end
-""" 
-removes items from batch when they are at IO
 """
-function savemakespan_item!(makespandict,allitems, itemstopick, batch, incumbentstate, IO, time) # will need to mod for multiIO
-   
+removes items from batch when they are at IO.
+
+mode="continue" (default, unchanged): item is delisted immediately on arrival;
+its matrix cell is left as untracked debris forever (never becomes escort capacity)
+— this is exactly the original behavior.
+
+mode="leave": on arrival, the item is removed from itemstopick but kept in
+`batch` for exactly one more PBSengine! round (so it still counts as a blocking
+obstacle via the existing allkeys/blockmat machinery — nothing else can enter
+or route through that cell). On the following call, its one-period wait is over:
+it's dropped from batch and promoted into a real `escorts` entry at the same
+coords, becoming usable escort capacity from then on — matching the paper's
+constraint (12)/(13) one-period wait before conversion.
+"""
+function savemakespan_item!(makespandict,allitems, itemstopick, batch, incumbentstate, IO, time; # will need to mod for multiIO
+                             mode="continue", escorts=nothing, leave_grace=nothing)
     if isa(IO, Tuple)
-        iox, ioy = IO
-        if incumbentstate[iox, ioy] in keys(itemstopick) 
-            itemid = incumbentstate[iox, ioy]
-            #item = itemstopick[itemid]
-            makespandict[itemid] = 1
-            delete!(itemstopick, itemid)
-            if haskey(batch, itemid)
-                delete!(batch, itemid)
-            end
-        elseif incumbentstate[iox, ioy] in keys(batch)
-            itemid = incumbentstate[iox, ioy]
-            makespandict[itemid] = time - 0 # allitems[itemid].tes  use .tes for big batches, 0 for exact comparison
-            delete!(batch, itemid)
-        end
-    elseif  isa(IO, Vector{Tuple{Int,Int}})
-        for io in IO
-            iox, ioy = io
-            if incumbentstate[iox, ioy] in keys(itemstopick) 
-                itemid = incumbentstate[iox, ioy]
-                #item = itemstopick[itemid]
-                makespandict[itemid] = 1
-                delete!(itemstopick, itemid)
-                if haskey(batch, itemid)
-                    delete!(batch, itemid)
-                end
-            elseif incumbentstate[iox, ioy] in keys(batch)
-                itemid = incumbentstate[iox, ioy]
-                makespandict[itemid] = time - allitems[itemid].tes
-                delete!(batch, itemid)
-            end
-        end
+        io_list = [IO]
+    elseif isa(IO, Vector{Tuple{Int,Int}})
+        io_list = IO
     else
         throw(ArgumentError("IO in wrong format: should be a Tuple{x=int,y=int} or an Array{Tuple}"))
-    end   
+    end
+
+    for (iox, ioy) in io_list
+        cellid = incumbentstate[iox, ioy]
+
+        if mode == "leave" && haskey(leave_grace, cellid)
+            # one full round of idling at the IO cell elapsed -> convert to escort
+            delete!(batch, cellid)
+            escorts[cellid] = createescort(cellid, (iox, ioy), time)
+            delete!(leave_grace, cellid)
+            continue
+        end
+
+        if cellid in keys(itemstopick)
+            item_obj = itemstopick[cellid]
+            makespandict[cellid] = 1
+            delete!(itemstopick, cellid)
+            if mode == "leave"
+                batch[cellid] = item_obj # ensure it's blocking as a normal batch item
+                leave_grace[cellid] = time
+            elseif haskey(batch, cellid)
+                delete!(batch, cellid)
+            end
+        elseif cellid in keys(batch)
+            makespandict[cellid] = time - (isa(IO, Tuple) ? 0 : allitems[cellid].tes) # allitems[itemid].tes use .tes for big batches, 0 for exact comparison
+            if mode == "leave"
+                leave_grace[cellid] = time # stays in batch this round, converts next round
+            else
+                delete!(batch, cellid)
+            end
+        end
+    end
 end
 """
 pushes either the most urgent of the closest items to batch
@@ -192,7 +207,7 @@ function changeitems!(batch, itemstopick,time,IO)
                 push!(closetoIO, itemid)
             end
         end
-    elseif isa(IO, Array{Tuple})
+    elseif isa(IO, Vector{Tuple{Int,Int}})
         for io in IO
             iox, ioy = io
             for (itemid, item) in batch
@@ -306,7 +321,17 @@ function assign_default_deadlines!(items, matrixsize, IO, no_cores, rng)
     end
 end
 
-function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1)
+function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1, mode="continue", deterministic_anchor=false, mm="bm", iter_cap=nothing)
+    mm in ("bm", "lm") || throw(ArgumentError("mm must be \"bm\" (batch movement, default) or \"lm\" (load movement, one cell per direction per iteration), got $(repr(mm))"))
+    UNIT_STEP[] = (mm == "lm")
+    SINGLE_ITEM_RUN[] = (mm == "lm" && length(items) == 1)
+    TOTAL_MOVES[] = 0
+    ESCORT_RELOCS[] = 0
+    empty!(COMMITTED_ESCORT)
+    empty!(COMMITTED_IO)
+    empty!(ITEM_IDLE)
+    empty!(ITEM_LASTPOS)
+    iteration_cap = something(iter_cap, mm == "lm" ? 10_000 : 1_000)
     setup_workers!(no_cores)   # spawns workers + loads code on them if not done yet
     assign_default_deadlines!(items, size(initialstate), IO, no_cores, rng)
     allitems = deepcopy(items)
@@ -324,16 +349,25 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
     end
     batch = Dict{String, item}()
     local batch = createbatch!(batch, allitems,itemstopick, incumbentstate, time, n, IO)
-    stalematecheck = true 
+    leave_grace = Dict{String, Int}()  # only used when mode=="leave"
+    stalematecheck = true
     shuffletrigger= false
-  
+
     # Array to store states with movement info: (state, moved, iteration, items_state, escorts_state)
     states_history = Tuple{Matrix{String}, Bool, Int, Dict{String,item}, Dict{String,escort}}[]
-    
+
     while !(isempty(itemstopick)&&isempty(batch))
-        savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time) # deletes items from batch 
-        if length(batch) <= n-r #decide on batch 
-            newcandidates = createbatch!(batch,allitems,itemstopick, incumbentstate, time, r, IO) 
+        savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time; # deletes items from batch
+                            mode=mode, escorts=escorts, leave_grace=leave_grace)
+        # In leave mode, an item that reached IO stays in `batch` for one grace
+        # round (see savemakespan_item!) purely so it keeps blocking — it's not
+        # a real active target any more. Don't count it against the batch-size
+        # threshold, so a new item can be activated during that same round
+        # instead of waiting a full extra iteration for the grace item to
+        # convert.
+        grace_count = mode == "leave" ? length(leave_grace) : 0
+        if length(batch) - grace_count <= n-r #decide on batch
+            newcandidates = createbatch!(batch,allitems,itemstopick, incumbentstate, time, r, IO)
             if !isempty(keys(newcandidates))
                 for (key, value) in newcandidates
                     if !haskey(batch, key)
@@ -350,9 +384,9 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
         end
         
         #assign escorts for items unique
-        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime", no_cores=no_cores)
+        moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime", no_cores=no_cores, deterministic_anchor=deterministic_anchor)
         #moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
-        
+
         # Store state with movement info and current items/escorts state
         push!(states_history, (deepcopy(incumbentstate), moved, time, deepcopy(batch), deepcopy(escorts)))
         
@@ -364,16 +398,16 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
                 stalematecheck = false
             end
         end
-        if time >1000 
+        if time > iteration_cap
             break
         end
     end
-    
+
     # Post-process: save all plots
     for (state, moved, iter, items_state, escorts_state) in states_history
         save_plot(saveplot, state, items_state, escorts_state, IO, "$(testid)_$(iter)_test", save_directory)
     end
-    if time >900
+    if time > 0.9 * iteration_cap
         println("Warning: reached iteration limit without completing all items. Check for potential issues.")
     end
     # Post-process: calculate makespan based only on actual movements
@@ -381,7 +415,7 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
     
     return incumbentstate, makespandict, time-1
 end
-function main_savenow(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1)
+function main_savenow(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1, mode="continue")
     setup_workers!(no_cores)
     assign_default_deadlines!(items, size(initialstate), IO, no_cores, rng)
     allitems = deepcopy(items)
@@ -399,13 +433,15 @@ function main_savenow(initialstate, items, escorts, IO, testid, save_directory; 
     end
     batch = Dict{String, item}()
     local batch = createbatch!(batch, allitems, itemstopick, incumbentstate, time, n, IO)
+    leave_grace = Dict{String, Int}()  # only used when mode=="leave"
     stalematecheck = true
     shuffletrigger = false
 
     states_history = Tuple{Matrix{String}, Bool, Int, Dict{String,item}, Dict{String,escort}}[]
 
     while !(isempty(itemstopick) && isempty(batch))
-        savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time)
+        savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time;
+                            mode=mode, escorts=escorts, leave_grace=leave_grace)
         if length(batch) <= n - r
             newcandidates = createbatch!(batch, allitems, itemstopick, incumbentstate, time, r, IO)
             if !isempty(keys(newcandidates))

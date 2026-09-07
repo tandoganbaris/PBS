@@ -122,6 +122,7 @@ function solve_and_save_text(initialstate, items, escorts_dict, IO, solution_pat
     end
     =#
 
+
     return incumbentstate, makespandict, timestep - 1
 end
 
@@ -137,9 +138,9 @@ function run_experiments()
     println("Warming up (5 instances)...")
     for w in 1:5
         rng_w = MersenneTwister(w)
-        wd    = Dict("$i" => 1.0 for i in 1:2)
+        wd    = Dict(("$i" => 1.0) for i in 1:2)
         ws, wi, we = randomintialstate((10, 10), 2, wd, rng_w)
-        solve_and_save_text(ws, wi, we, (1, 1), tempname(); r=1, no_cores=NO_CORES)
+        solve_and_save_text(ws, wi, we, (1, 1), tempname(); r=1, no_cores=1)
     end
     println("Warm-up done.\n")
 
@@ -148,7 +149,6 @@ function run_experiments()
     grid_range    = 10:10:100
 
     total = length(items_range) * length(escorts_range) * length(grid_range) * 10
-    done  = 0
 
     results_path = joinpath(base_dir, "results_summary.csv")
 
@@ -175,55 +175,68 @@ function run_experiments()
         CSV.write(results_path, header_df)
     end
 
-    for n_items in items_range, n_escorts in escorts_range, grid_n in grid_range
-        for inst_num in 1:10
-            done += 1
+    # Flatten the nested parameter sweep into one task list so instances can be
+    # split across cores with Threads.@threads instead of solved one at a time.
+    tasks = Tuple{Int,Int,Int,Int}[]  # (n_items, n_escorts, grid_n, inst_num)
+    for n_items in items_range, n_escorts in escorts_range, grid_n in grid_range, inst_num in 1:10
+        (grid_n, n_items, n_escorts, inst_num) in completed && continue
+        push!(tasks, (n_items, n_escorts, grid_n, inst_num))
+    end
+    println("Running $(length(tasks)) / $total instances across $(Threads.nthreads()) threads.\n")
 
-            (grid_n, n_items, n_escorts, inst_num) in completed && continue
+    # Each instance is solved independently on its own thread with no_cores=1
+    # (parallelism now comes from splitting instances across cores, not from
+    # GRASP replicates within a single instance). io_lock serializes the CSV
+    # append and progress print, which aren't safe to do concurrently.
+    io_lock = ReentrantLock()
+    done = Threads.Atomic{Int}(length(completed))
 
-            # IO position (display x,y — both on bottom row y=1):
-            #   left   → display (1, 1)        = internal (row=1, col=1)
-            #   center → display (grid_n÷2, 1) = internal (row=1, col=grid_n÷2)
-            IO        = inst_num <= 5 ? (1, 1) : (div(grid_n, 2), 1)
-            io_label  = inst_num <= 5 ? "left" : "center"
+    Threads.@threads for (n_items, n_escorts, grid_n, inst_num) in tasks
+        # IO position (display x,y — both on bottom row y=1):
+        #   left   → display (1, 1)        = internal (row=1, col=1)
+        #   center → display (grid_n÷2, 1) = internal (row=1, col=grid_n÷2)
+        IO        = inst_num <= 5 ? (1, 1) : (div(grid_n, 2), 1)
+        io_label  = inst_num <= 5 ? "left" : "center"
 
-            # Reproducible RNG per instance
-            seed     = n_items * 1_000_000 + n_escorts * 10_000 + grid_n * 100 + inst_num
-            rng_inst = MersenneTwister(seed)
+        # Reproducible RNG per instance
+        seed     = n_items * 1_000_000 + n_escorts * 10_000 + grid_n * 100 + inst_num
+        rng_inst = MersenneTwister(seed)
 
-            # All items available from time 1 (deadline = 1.0)
-            item_deadlines = Dict("$i" => 1.0 for i in 1:n_items), 
+        # All items available from time 1 (deadline = 1.0)
+        item_deadlines = Dict(("$i" => 1.0) for i in 1:n_items)
 
-            initialstate, items, escorts_dict =
-                randomintialstate((grid_n, grid_n), n_escorts, item_deadlines, rng_inst)
+        initialstate, items, escorts_dict =
+            randomintialstate((grid_n, grid_n), n_escorts, item_deadlines, rng_inst)
 
-            tag       = "$(grid_n)x$(grid_n)_I$(n_items)_E$(n_escorts)_$(inst_num)"
-            inst_path = joinpath(base_dir, "instance_$(tag).txt")
-            save_instance_text(initialstate, items, escorts_dict, IO, inst_path)
+        tag       = "$(grid_n)x$(grid_n)_I$(n_items)_E$(n_escorts)_$(inst_num)"
+        inst_path = joinpath(base_dir, "instance_$(tag).txt")
+        save_instance_text(initialstate, items, escorts_dict, IO, inst_path)
 
-            t0 = time()
-            _, makespandict, makespan = solve_and_save_text(
-                initialstate, items, escorts_dict, IO, "";
-                r=1, no_cores=NO_CORES
-            )
-            comp_time = time() - t0
+        t0 = time()
+        _, makespandict, makespan = solve_and_save_text(
+            initialstate, items, escorts_dict, IO, "";
+            r=1, no_cores=1
+        )
+        comp_time = time() - t0
 
-            flowtime = isempty(makespandict) ? 0 : sum(values(makespandict))
+        flowtime = isempty(makespandict) ? 0 : sum(values(makespandict))
 
+        row_df = DataFrame(
+            grid_size     = [grid_n],
+            n_items       = [n_items],
+            n_escorts     = [n_escorts],
+            instance      = [inst_num],
+            io_position   = [io_label],
+            makespan      = [makespan],
+            flowtime      = [flowtime],
+            comp_time_sec = [round(comp_time, digits=4)],
+        )
+
+        n_done = Threads.atomic_add!(done, 1) + 1
+        lock(io_lock) do
             # Append this row immediately so it survives an interrupt
-            row_df = DataFrame(
-                grid_size     = [grid_n],
-                n_items       = [n_items],
-                n_escorts     = [n_escorts],
-                instance      = [inst_num],
-                io_position   = [io_label],
-                makespan      = [makespan],
-                flowtime      = [flowtime],
-                comp_time_sec = [round(comp_time, digits=4)],
-            )
             CSV.write(results_path, row_df; append=true)
-
-            println("[$done/$total] $tag  io=$io_label  makespan=$makespan  " *
+            println("[$n_done/$total] $tag  io=$io_label  makespan=$makespan  " *
                     "flowtime=$flowtime  t=$(round(comp_time, digits=2))s")
         end
     end

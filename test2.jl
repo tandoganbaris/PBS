@@ -57,6 +57,7 @@ end
         end
         escort_coords = parse_coords(row[:Escorts])
         item_coords = parse_coords(row[Symbol("Target Loads")])
+        retrieval_mode = lowercase(strip(string(row[Symbol("Retrieval Mode")])))
 
         # Build escorts
         escorts = Dict{String, escort}()
@@ -97,7 +98,7 @@ end
             initialstate, items, escorts,
             IO_coords,
             1,
-            folder_path, n=4, no_cores=NO_CORES
+            folder_path, n=4, no_cores=NO_CORES, mode=retrieval_mode
         )
 
         # 1) The makespan from your algorithm

@@ -1,0 +1,24 @@
+=== 6x37_22_13_8  grid=37x6  #esc=22  #loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_8 : iters=200  escort_relocs=419  -> C:\codestuff\PBS\plots_scale_worst\6x37_22_13_8
+=== 6x37_22_13_94  grid=37x6  #esc=22  #loads=13  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+6x37_22_13_94 : iters=200  escort_relocs=479  -> C:\codestuff\PBS\plots_scale_worst\6x37_22_13_94
+=== 10x61_61_21_64  grid=61x10  #esc=61  #loads=21  cap=200 ===
+10x61_61_21_64 : iters=43  escort_relocs=1243  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_21_64
+=== 10x61_61_21_89  grid=61x10  #esc=61  #loads=21  cap=200 ===
+Warning: reached iteration limit without completing all items. Check for potential issues.
+10x61_61_21_89 : iters=200  escort_relocs=1142  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_21_89
+=== 10x61_61_1_153  grid=61x10  #esc=61  #loads=1  cap=120 ===
+10x61_61_1_153 : iters=98  escort_relocs=2088  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_1_153
+=== 10x61_61_1_199  grid=61x10  #esc=61  #loads=1  cap=110 ===
+10x61_61_1_199 : iters=90  escort_relocs=2211  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_1_199
+=== 10x61_61_1_18  grid=61x10  #esc=61  #loads=1  cap=105 ===
+10x61_61_1_18 : iters=86  escort_relocs=2088  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_1_18
+=== 10x61_61_1_165  grid=61x10  #esc=61  #loads=1  cap=100 ===
+10x61_61_1_165 : iters=82  escort_relocs=2347  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_1_165
+=== 10x61_61_1_85  grid=61x10  #esc=61  #loads=1  cap=95 ===
+10x61_61_1_85 : iters=78  escort_relocs=2086  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_1_85
+=== 10x61_61_1_146  grid=61x10  #esc=61  #loads=1  cap=95 ===
+10x61_61_1_146 : iters=78  escort_relocs=2120  -> C:\codestuff\PBS\plots_scale_worst\10x61_61_1_146
+Done.

@@ -1,0 +1,11 @@
+warmup done
+
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  instances_with_events=0/200  total_events=0
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  instances_with_events=0/200  total_events=0
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  instances_with_events=100/100  total_events=1322
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  instances_with_events=100/100  total_events=8361
+
+Done. Wrote candid_survey_instances.csv and candid_survey_events.csv

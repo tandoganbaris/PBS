@@ -1,0 +1,19 @@
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  io_order_mode=0  conv=98/100  mk=22.66  moves=316.81
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  io_order_mode=1  conv=98/100  mk=22.72  moves=317.4
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  io_order_mode=2  conv=98/100  mk=22.15  moves=312.54
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  io_order_mode=0  conv=99/100  mk=35.13  moves=1280.27
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  io_order_mode=1  conv=99/100  mk=35.28  moves=1289.12
+Warning: reached iteration limit without completing all items. Check for potential issues.
+>>> Large_scale_RL_10_61_21_61_formatted.csv  io_order_mode=2  conv=99/100  mk=35.08  moves=1268.86
+
+Done.
