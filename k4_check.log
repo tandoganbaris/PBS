@@ -1,0 +1,28 @@
+Warning: reached iteration limit without completing all items. Check for potential issues.
+warmup done  (checking 6 instances)
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+    10x61_61_21_38  FAIL (iter cap)
+Warning: reached iteration limit without completing all items. Check for potential issues.
+    10x61_61_21_50  FAIL (iter cap)
+Warning: reached iteration limit without completing all items. Check for potential issues.
+    10x61_61_21_52  FAIL (iter cap)
+Warning: reached iteration limit without completing all items. Check for potential issues.
+    10x61_61_21_89  FAIL (iter cap)
+Warning: reached iteration limit without completing all items. Check for potential issues.
+    10x61_61_21_91  FAIL (iter cap)
+Warning: reached iteration limit without completing all items. Check for potential issues.
+    10x61_61_21_99  FAIL (iter cap)
+>>> k=4  Large multi-IO   IDLE_FLEX=true
+    converged 0/6   failures: ["10x61_61_21_38", "10x61_61_21_50", "10x61_61_21_52", "10x61_61_21_89", "10x61_61_21_91", "10x61_61_21_99"]
+    10x61_61_21_38  makespan=43  flowtime=342
+    10x61_61_21_50  makespan=32  flowtime=265
+    10x61_61_21_52  makespan=35  flowtime=408
+Warning: reached iteration limit without completing all items. Check for potential issues.
+    10x61_61_21_89  FAIL (iter cap)
+    10x61_61_21_91  makespan=31  flowtime=316
+    10x61_61_21_99  makespan=44  flowtime=341
+>>> k=4  Large multi-IO   IDLE_FLEX=false
+    converged 5/6   failures: ["10x61_61_21_89"]
+
+Done.

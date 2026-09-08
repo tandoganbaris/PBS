@@ -1,0 +1,104 @@
+warmup done
+
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Medium_scale_RL_6_37_13_22_formatted.csv [20]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Medium_scale_RL_6_37_13_22_formatted.csv [40]
+  Medium_scale_RL_6_37_13_22_formatted.csv [60]
+  Medium_scale_RL_6_37_13_22_formatted.csv [80]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Medium_scale_RL_6_37_13_22_formatted.csv [100]
+done Medium_scale_RL_6_37_13_22_formatted.csv
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Large_scale_RL_10_61_21_61_formatted.csv [20]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Large_scale_RL_10_61_21_61_formatted.csv [40]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Large_scale_RL_10_61_21_61_formatted.csv [60]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Large_scale_RL_10_61_21_61_formatted.csv [80]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  Large_scale_RL_10_61_21_61_formatted.csv [100]
+done Large_scale_RL_10_61_21_61_formatted.csv
+
+=== Medium_scale_RL_6_37_13_22_formatted.csv ===
+  thispaper  solved 98/100  mk=22.71  flowtime=153.94
+  n1         solved 98/100  mk=33.83  flowtime=246.32
+  n2         solved 97/100  mk=24.34  flowtime=176.16
+  n3         solved 98/100  mk=22.42  flowtime=158.1
+  n4         solved 98/100  mk=21.99  flowtime=151.29
+  postproc   solved 98/100  mk=23.0  flowtime=156.05
+  --- common converged set: 97/100 instances ---
+  RL           flowtime = 484.35   (n=97)
+  thispaper    flowtime = 153.93
+  n1           flowtime = 245.1
+  n2           flowtime = 176.16
+  n3           flowtime = 158.02
+  n4           flowtime = 151.14
+  postproc     flowtime = 156.0
+
+=== Large_scale_RL_10_61_21_61_formatted.csv ===
+  thispaper  solved 93/100  mk=37.09  flowtime=341.4
+  n1         solved 99/100  mk=51.79  flowtime=680.0
+  n2         solved 93/100  mk=38.24  flowtime=442.65
+  n3         solved 92/100  mk=38.95  flowtime=387.48
+  n4         solved 94/100  mk=37.91  flowtime=357.69
+  postproc   solved 95/100  mk=39.93  flowtime=351.53
+  --- common converged set: 82/100 instances ---
+  RL           flowtime = 1077.95   (n=82)
+  thispaper    flowtime = 341.94
+  n1           flowtime = 678.49
+  n2           flowtime = 444.09
+  n3           flowtime = 383.32
+  n4           flowtime = 358.94
+  postproc     flowtime = 352.02
+
+Done.

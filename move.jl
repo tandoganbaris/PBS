@@ -183,7 +183,7 @@ const IO_ORDER_MODE = Ref(2)
 # threshold) redirect the nearest idle escorts to freeroam toward that item.
 # ITEM_IDLE[itemid] = consecutive stagnant iterations; ITEM_LASTPOS tracks the
 # previous position. Both reset in main().
-const IDLE_FLEX = Ref(true)
+const IDLE_FLEX = Ref(false)   # on ONLY for the nearest-1-escort multi-IO/LM runner, which sets IDLE_FLEX[]=true itself; default-on regressed This-paper/k>=2 (freeroam redirect congests when escorts are plentiful)
 const IDLE_FLEX_START = Ref(12)      # stagnant iterations before any relaxation
 const IDLE_FLEX_REDIRECT = Ref(25)   # stagnant iterations before pulling escorts over by freeroam
 const ITEM_IDLE = Dict{String,Int}()

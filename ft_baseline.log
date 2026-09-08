@@ -1,0 +1,55 @@
+warmup done
+
+>>> Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv  (200 instances)
+  [20/200]
+  [40/200]
+  [60/200]
+  [80/200]
+  [100/200]
+  [120/200]
+  [140/200]
+  [160/200]
+  [180/200]
+  [200/200]
+  wrote C:\codestuff\PBS\HeGithub\Medium_scale_Yalcin_vs_IP_vs_RL_6_37_1_22_formatted.csv   converged 200/200   excluded 0   errors 0
+  mean Makespan Tandogan = 21.69    mean Flowtime Tandogan = 21.69
+
+>>> Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv  (200 instances)
+  [20/200]
+  [40/200]
+  [60/200]
+  [80/200]
+  [100/200]
+  [120/200]
+  [140/200]
+  [160/200]
+  [180/200]
+  [200/200]
+  wrote C:\codestuff\PBS\HeGithub\Large_scale_Yalcin_vs_RL_10_61_1_61_formatted.csv   converged 200/200   excluded 0   errors 0
+  mean Makespan Tandogan = 32.57    mean Flowtime Tandogan = 32.57
+
+>>> Medium_scale_RL_6_37_13_22_formatted.csv  (100 instances)
+  [20/100]
+  [40/100]
+  [60/100]
+  [80/100]
+  [100/100]
+  wrote C:\codestuff\PBS\HeGithub\Medium_scale_RL_6_37_13_22_formatted.csv   converged 95/100   excluded 5   errors 0
+  mean Makespan Tandogan = 22.56    mean Flowtime Tandogan = 152.93
+
+>>> Large_scale_RL_10_61_21_61_formatted.csv  (100 instances)
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  [20/100]
+  [40/100]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  [60/100]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  [80/100]
+Warning: reached iteration limit without completing all items. Check for potential issues.
+Warning: reached iteration limit without completing all items. Check for potential issues.
+  [100/100]
+  wrote C:\codestuff\PBS\HeGithub\Large_scale_RL_10_61_21_61_formatted.csv   converged 93/100   excluded 1   errors 0
+  mean Makespan Tandogan = 37.09    mean Flowtime Tandogan = 341.4
+
+Done.
