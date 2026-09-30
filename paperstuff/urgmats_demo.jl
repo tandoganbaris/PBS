@@ -81,18 +81,16 @@ end
 
 # ── Scenario ──────────────────────────────────────────────────────────────────
 # 5x5 warehouse, IO at (1,1).
-# L1 (urgent item) at (3,2). L2 (another item) at (1,2), in L1's row.
+# L1 (urgent item) at (4,3). L2 (another item) at (2,4), directly above L1's row.
 # Escort E1 at (5,5) — further right and up than L1, not yet positioned to serve it.
 #
-# blockmat has a 3-cell block spanning x = urgx-2 .. urgx at y = urgy+1 (i.e.
-# (1,3),(2,3),(3,3)) — directly above L1's row, cutting across the columns
-# urgmats() would otherwise sweep upward through.
+# blockmat blocks y = urgy+1 for x = 1 .. urgx (except L2's cell) — i.e.
+# (1,4),(3,4),(4,4) — so together with L2 the whole row above L1 is sealed.
 #
-# Effect: the horizontal arm (columns 2,1, scanning upward from y=urgy+1=3)
-# hits the block on its very first step at every column it tries, so it marks
-# nothing — the block kills that whole arm before it can start. The vertical
-# arm (row y=1, scanning right from L1) is untouched by the block and still
-# marks (4,1) and (5,1).
+# Effect: the horizontal arm (columns 3,2,1, scanning upward from y=urgy+1=4)
+# hits a block or L2 on its very first step at every column it tries, so it
+# marks nothing — the arm is killed before it can start. The vertical arm
+# (rows y=2,1, scanning right from L1) is untouched and marks (5,2) and (5,1).
 # ──────────────────────────────────────────────────────────────────────────────
 
 l1_pos = (4, 3)
@@ -112,8 +110,8 @@ state[e1_pos...] = "Escort"
 
 blockmat = zeros(Int, GS, GS)
 urgx, urgy = l1_pos
-for x in (urgx-1):urgx
-    blockmat[x, urgy+1] = 1
+for x in 1:urgx
+    (x, urgy+1) != l2_pos && (blockmat[x, urgy+1] = 1)
 end
 
 result = urgmats(items, escorts, blockmat, state, ["L1"], IO_UM)

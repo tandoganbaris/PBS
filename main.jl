@@ -321,6 +321,56 @@ function assign_default_deadlines!(items, matrixsize, IO, no_cores, rng)
     end
 end
 
+"""
+Stall handling, both over STALL_WINDOW[] consecutive steps (0 disables both):
+- Rollback: if no target load changes position, the run is restored to the
+  state just before the last step that moved a target load, and replayed with the reach-escort guard on (see reach_guard_io in move.jl)
+  until the next load is picked. If every load is urgent at that point, their
+  urgency is restarted (reset_urgency!). Each snapshot is rolled back to at most once.
+- Forced freeroam: if no escort is assigned as a mover and no target load
+  moves, idle escorts that direct serve doesn't use skip urgent serve and are
+  forced into freeroam! (see force_freeroam in move.jl)
+  until an escort is assigned as a mover again.
+"""
+const STALL_WINDOW = Ref(10)
+
+stall_snapshot(state, batch, escorts, itemstopick, allitems, mst, leave_grace, time, nhist, stalematecheck, shuffletrigger) =
+    deepcopy((state, batch, escorts, itemstopick, allitems, mst, leave_grace, time, nhist, stalematecheck, shuffletrigger))
+
+# Restores a stall_snapshot in place; returns (time, stalematecheck, shuffletrigger).
+function stall_restore!(snap, state, batch, escorts, itemstopick, allitems, mst, leave_grace, states_history)
+    s = deepcopy(snap)
+    state .= s[1]
+    for (dst, src) in ((batch, s[2]), (escorts, s[3]), (itemstopick, s[4]), (allitems, s[5]), (mst, s[6]), (leave_grace, s[7]))
+        empty!(dst)
+        merge!(dst, src)
+    end
+    resize!(states_history, s[9])
+    return s[8], s[10], s[11]
+end
+
+target_load_moved(batch, loadpos) = any(haskey(batch, k) && batch[k].coords != p for (k, p) in loadpos)
+
+# Same urgency test as moveescorts_flow! (single IO).
+function all_loads_urgent(batch, time, IO, gridsize)
+    isempty(batch) && return false
+    iox, ioy = IO
+    diagonal_size = sqrt(gridsize[1]^2 + gridsize[2]^2)
+    return all(values(batch)) do it
+        floor(Int, time + (abs(iox - it.coords[1]) + it.coords[2]) * 1.5) >= it.deadline ||
+        (time - it.tes) + (abs(it.coords[1] - iox) + abs(it.coords[2] - ioy)) > diagonal_size
+    end
+end
+
+# Restart the loads' urgency as if they had just entered: waiting time from now,
+# and a fresh Manhattan-distance deadline far enough out that none is urgent yet.
+function reset_urgency!(batch, time, IO)
+    for it in values(batch)
+        it.tes = time
+        it.deadline = time + 2 * (io_distance(it.coords, IO) + 1)
+    end
+end
+
 function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1, no_cores=1, mode="continue", deterministic_anchor=false, mm="bm", iter_cap=nothing)
     mm in ("bm", "lm") || throw(ArgumentError("mm must be \"bm\" (batch movement, default) or \"lm\" (load movement, one cell per direction per iteration), got $(repr(mm))"))
     UNIT_STEP[] = (mm == "lm")
@@ -331,7 +381,7 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
     empty!(COMMITTED_IO)
     empty!(ITEM_IDLE)
     empty!(ITEM_LASTPOS)
-    iteration_cap = something(iter_cap, mm == "lm" ? 10_000 : 1_000)
+    iteration_cap = something(iter_cap, 10 * sum(io_distance(it.coords, IO) for it in values(items); init=0))
     setup_workers!(no_cores)   # spawns workers + loads code on them if not done yet
     assign_default_deadlines!(items, size(initialstate), IO, no_cores, rng)
     allitems = deepcopy(items)
@@ -356,9 +406,22 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
     # Array to store states with movement info: (state, moved, iteration, items_state, escorts_state)
     states_history = Tuple{Matrix{String}, Bool, Int, Dict{String,item}, Dict{String,escort}}[]
 
+    set_reach_guard!(nothing)
+    set_force_freeroam!(false)
+    stall_count = 0                 # consecutive steps without any target load moving
+    noalign_count = 0               # consecutive steps with no mover assigned and no target load moving
+    rollback_point = nothing        # snapshot taken just before the last step that moved a target load
+    rolled_back_to = Set{Int}()     # snapshot times already rolled back to
+    picks_at_guard = 0
+
     while !(isempty(itemstopick)&&isempty(batch))
+        pre_step = STALL_WINDOW[] > 0 ? stall_snapshot(incumbentstate, batch, escorts, itemstopick, allitems, makespandict_temp,
+                                                       leave_grace, time, length(states_history), stalematecheck, shuffletrigger) : nothing
         savemakespan_item!(makespandict_temp, allitems, itemstopick, batch, incumbentstate, IO, time; # deletes items from batch
                             mode=mode, escorts=escorts, leave_grace=leave_grace)
+        if reach_guard_io() !== nothing && length(makespandict_temp) > picks_at_guard
+            set_reach_guard!(nothing)   # a load was picked since the rollback: guard off again
+        end
         # In leave mode, an item that reached IO stays in `batch` for one grace
         # round (see savemakespan_item!) purely so it keeps blocking — it's not
         # a real active target any more. Don't count it against the batch-size
@@ -384,12 +447,23 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
         end
         
         #assign escorts for items unique
+        loadpos = Dict(k => v.coords for (k, v) in batch)
         moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="flowtime", no_cores=no_cores, deterministic_anchor=deterministic_anchor)
         #moved = PBSengine!(time, incumbentstate, batch, escorts, IO, obj="makespan")
+        if target_load_moved(batch, loadpos)
+            rollback_point = pre_step
+            stall_count = 0
+        else
+            stall_count += 1
+        end
+        noalign_count = (last_n_movers() == 0 && !target_load_moved(batch, loadpos)) ? noalign_count + 1 : 0
+        if STALL_WINDOW[] > 0 && noalign_count >= STALL_WINDOW[]
+            set_force_freeroam!(true)
+        end
 
         # Store state with movement info and current items/escorts state
         push!(states_history, (deepcopy(incumbentstate), moved, time, deepcopy(batch), deepcopy(escorts)))
-        
+
         time +=1
         if stalematecheck
             if !moved
@@ -398,10 +472,27 @@ function main(initialstate, items, escorts, IO, testid, save_directory; n=4, r=1
                 stalematecheck = false
             end
         end
+        if STALL_WINDOW[] > 0 && stall_count >= STALL_WINDOW[] && rollback_point !== nothing && !(rollback_point[8] in rolled_back_to)
+            push!(rolled_back_to, rollback_point[8])
+            time, stalematecheck, shuffletrigger = stall_restore!(rollback_point, incumbentstate, batch, escorts, itemstopick,
+                                                                   allitems, makespandict_temp, leave_grace, states_history)
+            set_reach_guard!(IO)
+            if IO isa Tuple && all_loads_urgent(batch, time, IO, size(incumbentstate))
+                reset_urgency!(batch, time, IO)
+            end
+            picks_at_guard = length(makespandict_temp)
+            rollback_point = nothing
+            stall_count = 0
+            noalign_count = 0
+            set_force_freeroam!(false)
+            continue
+        end
         if time > iteration_cap
             break
         end
     end
+    set_reach_guard!(nothing)
+    set_force_freeroam!(false)
 
     # Post-process: save all plots
     for (state, moved, iter, items_state, escorts_state) in states_history

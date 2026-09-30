@@ -299,7 +299,9 @@ function PBSengine!(iteration, incumbentstate, batch, escorts, IO; obj="makespan
         # the caller's first iteration (e.g. the first PBSengine! call of the first rep),
         # so the anchors are sampled exactly once rather than on every time step.
         anchor_this_call = deterministic_anchor && iteration == 1
+        guard_io = reach_guard_io()   # task-local, so hand it to the spawned tasks explicitly
         Threads.@threads for i in 1:no_cores
+            set_reach_guard!(guard_io)
             local_state, local_batch, local_escorts = thread_copies[i]
             try
                 if anchor_this_call && (i == 1 || i == 2)
@@ -1263,6 +1265,7 @@ function updateitemescorts!(itemescortdict, items, sorted_keys,  escorts, availa
             ex, ey = escorts[escort_id].coords
             if abs(ey - y) <= tol && x != io_x
                 if allowedOrder(ex, io_x,x) && # escort is on the right side and item has to move right
+                    !hurts_load_across_io(items, key, ex, ey, io_x, x) &&
                     noblock(blockmat, x, y, ex, ey) &&
                     !(haskey(escorts[escort_id].banset, iteration) && key in escorts[escort_id].banset[iteration])
                     push!(escortsx, escort_id)
@@ -1288,6 +1291,7 @@ function updateitemescortslight!(itemescortdict, items, sorted_keys,  escorts, a
         for escort_id in escortsx
             ex, ey = escorts[escort_id].coords
             if !(ey == y && allowedOrder(ex, io_x,x) && # escort is on the right side and item has to move right
+                !hurts_load_across_io(items, key, ex, ey, io_x, x) &&
                 noblock(blockmat, x, y, ex, ey) && escort_id in availableescorts) || (haskey(escorts[escort_id].banset, iteration) && key in escorts[escort_id].banset[iteration])
                 filter!(x -> x != escort_id, escortsx)
             end
@@ -1915,7 +1919,7 @@ function find_nearest_escort_multi_io(itemid::String,items::Dict,remaining_keys:
 
     if nearest_id != "" #TODO should we check for all ios this block?
         escort_x, escort_y = escorts[nearest_id].coords
-        if ((abs(iox - escort_x) + abs(ioy - escort_y)) <= length(keys(items))+1) # escort in close proximity to IO, therefore its move will be controlled
+        if ((abs(iox - escort_x) + abs(ioy - escort_y)) <= length(keys(items))) # escort in close proximity to IO, therefore its move will be controlled
             futurecoords = generatefuturecoords_multi_io(items, escorts, direction, nearest_id, itemid, matrix, item_to_ios, current_io)
             samecoords = Tuple{Int,Int}[]
             if direction == 2
@@ -1925,7 +1929,7 @@ function find_nearest_escort_multi_io(itemid::String,items::Dict,remaining_keys:
             end
             if !isempty(samecoords)
                 minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samecoords])
-                if minDist <= length(keys(items))+1 && # item far out from IO
+                if minDist <= length(keys(items)) && # item far out from IO
                     !path_to_io_exists_if(matrix, futurecoords, current_io)   # check with A* if this movement would cause some stupid block
                     items[itemid].direction = 0
                     return ""
@@ -2056,7 +2060,7 @@ function find_nearest_escort(itemid, items, sorted_keys, matrix, IO, blockmat, d
         # item forced to direction=0) based on a jump that was never going to
         # happen. Skip this check entirely in LM mode.
         escort_x, escort_y = escorts[nearest_id].coords
-        if ((abs(IO[1] - escort_x) + abs(IO[2] - escort_y)) <= length(keys(items))+1) # escort in close proximity to IO, therefore its move will be controlled
+        if ((abs(IO[1] - escort_x) + abs(IO[2] - escort_y)) <= length(keys(items))) # escort in close proximity to IO, therefore its move will be controlled
             futurecoords = generatefuturecoords(items, escorts,direction, nearest_id, itemid, matrix, IO)
             samecoords = Tuple{Int,Int}[]
             if direction == 2
@@ -2066,7 +2070,7 @@ function find_nearest_escort(itemid, items, sorted_keys, matrix, IO, blockmat, d
             end
             if !isempty(samecoords)
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samecoords])
-                if minDist <= length(keys(items))+1 && # item far out from IO
+                if minDist <= length(keys(items)) && # item far out from IO
                     !path_to_io_exists_if(matrix, futurecoords, IO)   # check with A* if this movement would cause some stupid block
                     items[itemid].direction = 0
                     return ""
@@ -2443,6 +2447,51 @@ function save_item_escorts!(matrix, items, escorts, IO) #saves all escorts for a
 end
 
 """moves one escort to the final coordinates, modifying the incumbent matrix and the positions of items and escorts"""
+# Reach-escort guard: switched on by the stall rollback in main.jl (after
+# STALL_WINDOW steps without any target load moving, the run is rolled back to
+# just before the last target-load move and replayed with the guard on). While
+# on, move_escort! rejects any move that cuts an escort off from the IO, i.e.
+# afterwards fewer escorts can be reached from the IO by a path that avoids
+# target loads. Kept in task-local storage so parallel runs don't see each
+# other's guard.
+reach_guard_io() = get(task_local_storage(), :reach_guard_io, nothing)
+set_reach_guard!(io) = (task_local_storage(:reach_guard_io, io); nothing)
+
+# Forced freeroam: switched on by main.jl after STALL_WINDOW steps in which no
+# escort was assigned as a mover and no target load moved. While on,
+# moveescorts_flow! still tries direct serve, but skips urgent serve and sends
+# every remaining idle escort through freeroam! (never freeroam_dumb!). It switches itself off as soon as
+# the mover phase has an escort assigned again. last_n_movers() reports how many
+# movers the latest moveescorts_flow! call had (task-local, like the guard).
+force_freeroam() = get(task_local_storage(), :force_freeroam, false)
+set_force_freeroam!(b) = (task_local_storage(:force_freeroam, b); nothing)
+last_n_movers() = get(task_local_storage(), :last_n_movers, -1)
+
+function n_escorts_reachable_from_io(matrix, items, escorts, IO)
+    ios = IO isa Tuple ? [IO] : IO
+    rows, cols = size(matrix)
+    seen = falses(rows, cols)
+    queue = Tuple{Int,Int}[]
+    for io in ios
+        haskey(items, matrix[io...]) && return length(escorts)   # a target load is on the IO, about to be picked
+        seen[io...] = true
+        push!(queue, io)
+    end
+    n = 0
+    head = 1
+    while head <= length(queue)
+        x, y = queue[head]; head += 1
+        haskey(escorts, matrix[x, y]) && (n += 1)
+        for (nx, ny) in ((x+1, y), (x-1, y), (x, y+1), (x, y-1))
+            if 1 <= nx <= rows && 1 <= ny <= cols && !seen[nx, ny] && !haskey(items, matrix[nx, ny])
+                seen[nx, ny] = true
+                push!(queue, (nx, ny))
+            end
+        end
+    end
+    return n
+end
+
 function move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
     if UNIT_STEP[] && SINGLE_ITEM_RUN[] && !isempty(items) &&
        all(it -> it.assigned_io isa Tuple  ? it.coords == it.assigned_io :
@@ -2476,6 +2525,17 @@ function move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
         elseif xgoal < xcurr
             direction = -1  # move escort left , block to right
         end
+    end
+
+    # Reach-escort guard: remember the shifted segment so the move can be undone.
+    # Only moves that cut off an escort that is currently reachable are rejected.
+    guard_io = reach_guard_io()
+    guarded = guard_io !== nothing && direction != 0
+    if guarded
+        n_reach_before = n_escorts_reachable_from_io(matrix, items, escorts, guard_io)
+        segment = abs(direction) == 1 ? [(x, ycurr) for x in min(xcurr, xgoal):max(xcurr, xgoal)] :
+                                        [(xcurr, y) for y in min(ycurr, ygoal):max(ycurr, ygoal)]
+        saved_cells = [(c, matrix[c...]) for c in segment]
     end
 
     #Depending on the direction, move the block, update the coordinates of the items and escorts if they exist in the block
@@ -2530,6 +2590,20 @@ function move_escort!(matrix, items, escorts, escortid, escort_finalcoords)
     end
     matrix[xgoal, ygoal] = escortid # update matrix
     escorts[escortid].coords = (xgoal, ygoal) # update escort's coordinates
+    if guarded && n_escorts_reachable_from_io(matrix, items, escorts, guard_io) < n_reach_before
+        for (c, id) in saved_cells # undo: this move would cut an escort off from the IO
+            matrix[c...] = id
+            haskey(items, id) && (items[id].coords = c)
+            haskey(escorts, id) && (escorts[id].coords = c)
+        end
+        # ban this escort from the target loads it tried to push for the next few
+        # iterations, so the assignment picks something else instead of retrying
+        pushed = [id for (_, id) in saved_cells if haskey(items, id)]
+        for it in CURRENT_ITER[]+1:CURRENT_ITER[]+3, id in pushed
+            push!(get!(escorts[escortid].banset, it, String[]), id)
+        end
+        return 0
+    end
     #print_matrix(matrix)
     TOTAL_MOVES[] += 1
     (UNIT_STEP[] && dest_had_escort) || (ESCORT_RELOCS[] += 1)
@@ -2614,7 +2688,7 @@ function moveescorts!(iteration, matrix, items, escorts, moverescortids, blockma
                 filter(x -> x[1] == itemx && x[2] >= min(itemy, escorty) && x[2] <= max(itemy, escorty), itemscoords) :
                 filter(x -> x[2] == itemy && x[1] >= min(itemx, escortx) && x[1] <= max(itemx, escortx), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samecoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     
                     push!(escorts[escortid].tabu, (escortx,escorty))
@@ -2895,6 +2969,9 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
     iox, ioy = IO
     moved_any = 0
     checkpathformovers = false
+    task_local_storage(:last_n_movers, length(moverescortids))
+    !isempty(moverescortids) && set_force_freeroam!(false)   # an escort is aligned again: stop forcing
+    forced_freeroam = force_freeroam()
 
     # Process movers starting with the escort closest to its own target item
     # (whichever of itemsx/itemsy is populated), ascending. Escorts with no
@@ -2986,7 +3063,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
                 filter(x -> x[1] == itemx && x[2] >= min(itemy, escorty) && x[2] <= max(itemy, escorty), itemscoords) :
                 filter(x -> x[2] == itemy && x[1] >= min(itemx, escortx) && x[1] <= max(itemx, escortx), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samecoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     
                     push!(escorts[escortid].tabu, (escortx,escorty))
@@ -3088,7 +3165,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
     nonmovers = setdiff(nonmovers, usedescorts)
     #3-4 step serve
     usedescorts = String[]
-    if !isempty(urgentcustomers)
+    if !isempty(urgentcustomers) && !forced_freeroam   # forced freeroam: skip urgent serve (direct serve still runs)
         urgentmatrixes = urgmats(items, escorts, blockmat, matrix, urgentcustomers, IO)
         for escortid in nonmovers
             esc_x , esc_y = escorts[escortid].coords
@@ -3131,7 +3208,7 @@ function moveescorts_flow!(iteration, matrix, items, escorts, moverescortids, bl
         end
         traced_fn = ""
         tabu_before = copy(escorts[escortid].tabu)
-        if smart[index] == 1
+        if smart[index] == 1 && !forced_freeroam
             moved, escort_finalcoords = freeroam_dumb!(iteration, matrix, items, escorts, escortid, blockmat, IO)
             traced_fn = "freeroam_dumb!"
         else
@@ -3253,7 +3330,7 @@ function moveescorts_flow_r!(iteration, matrix, items, escorts, moverescortids, 
                 filter(x -> x[1] == itemx && x[2] >= min(itemy, escorty) && x[2] <= max(itemy, escorty), itemscoords) :
                 filter(x -> x[2] == itemy && x[1] >= min(itemx, escortx) && x[1] <= max(itemx, escortx), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samecoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     
                     push!(escorts[escortid].tabu, (escortx,escorty))
@@ -3487,7 +3564,7 @@ function moveescorts_flow_multi_io!(iteration, matrix, items, escorts, global_bl
             iox, ioy = target_io  # Use the specific target IO for this assignment
 
             # Check if escort is close to its target IO
-            if abs(iox - escortx) + abs(ioy - escorty) <= length(keys(items)) + 1
+            if abs(iox - escortx) + abs(ioy - escorty) <= length(keys(items))
                 checkpathformovers = true
             end
             # Check if this move would push another item close to the target IO —
@@ -3579,7 +3656,7 @@ function moveescorts_flow_multi_io!(iteration, matrix, items, escorts, global_bl
                     
                     if !isempty(samecoords)
                         minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samecoords])
-                        if minDist > length(keys(items)) + 1 || path_to_io_exists_if(matrix, itemscoords, target_io)
+                        if minDist > length(keys(items)) || path_to_io_exists_if(matrix, itemscoords, target_io)
                             # Safe to move
                             TRACE_ESC[] == escortid && println("t=$iteration [MOVER] $escortid ($escortx,$escorty) -> $escort_finalcoords  item=$itemid dir=$direction io=$target_io")
                             push!(escorts[escortid].tabu, (escortx, escorty))
@@ -4008,7 +4085,7 @@ function moveescorts_flow_multi_io_r!(iteration, matrix, items, escorts, global_
             iox, ioy = target_io  # Use the specific target IO for this assignment
 
             # Check if escort is close to its target IO
-            if abs(iox - escortx) + abs(ioy - escorty) <= length(keys(items)) + 1
+            if abs(iox - escortx) + abs(ioy - escorty) <= length(keys(items))
                 checkpathformovers = true
             end
             # Check if this move would push another item close to the target IO —
@@ -4071,7 +4148,7 @@ function moveescorts_flow_multi_io_r!(iteration, matrix, items, escorts, global_
                     if !isempty(samecoords)
                         minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samecoords])
 
-                        if minDist > length(keys(items)) + 1 || path_to_io_exists_if(matrix, itemscoords, target_io)
+                        if minDist > length(keys(items)) || path_to_io_exists_if(matrix, itemscoords, target_io)
                             # Safe to move
                             TRACE_ESC[] == escortid && println("t=$iteration [MOVER] $escortid ($escortx,$escorty) -> $escort_finalcoords  item=$itemid dir=$direction io=$target_io")
                             push!(escorts[escortid].tabu, (escortx, escorty))
@@ -4507,7 +4584,7 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
                     closesty = itemid
@@ -4548,7 +4625,7 @@ function find_nearest_item_toescort!(iteration, matrix, items, escorts, escortid
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -5012,7 +5089,7 @@ function find_nearest_item_toescort_flow!(iteration, matrix, items, escorts, esc
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
                     closesty = itemid
@@ -5053,7 +5130,7 @@ function find_nearest_item_toescort_flow!(iteration, matrix, items, escorts, esc
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -5131,7 +5208,7 @@ function find_nearest_item_toescort_flow!(iteration, matrix, items, escorts, esc
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
                     closesty = itemid
@@ -5172,7 +5249,7 @@ function find_nearest_item_toescort_flow!(iteration, matrix, items, escorts, esc
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -5626,7 +5703,7 @@ function directserve_makespan!(iteration, matrix, items, escorts, escortid, urgc
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
                     closesty = itemid
@@ -5667,7 +5744,7 @@ function directserve_makespan!(iteration, matrix, items, escorts, escortid, urgc
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -5762,7 +5839,7 @@ function directserve_flow_r!(iteration, matrix, items, escorts, escortid, urgcus
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
                     closesty = itemid
@@ -5803,7 +5880,7 @@ function directserve_flow_r!(iteration, matrix, items, escorts, escortid, urgcus
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -5881,7 +5958,7 @@ function directserve_flow_r!(iteration, matrix, items, escorts, escortid, urgcus
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
                     closesty = itemid
@@ -5922,7 +5999,7 @@ function directserve_flow_r!(iteration, matrix, items, escorts, escortid, urgcus
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -6031,7 +6108,7 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
                     closesty = itemid
@@ -6072,7 +6149,7 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -6163,13 +6240,13 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
                 itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, IO)
                 sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in sameycoords])
-                if minDist  > length(keys(items))+1 || # item far out from IO
+                if minDist  > length(keys(items)) || # item far out from IO
                     path_to_io_exists_if(matrix, itemscoords, IO)   # check with A* if this movement would cause some stupid block
                     disty = ygap 
-                DEBUG_MOVE_TRACE[] && println("    [directserve X-path ACCEPT] esc=$escortid item=$itemid ygap=$ygap minDist=$minDist thresh=$(length(keys(items))+1)")
+                DEBUG_MOVE_TRACE[] && println("    [directserve X-path ACCEPT] esc=$escortid item=$itemid ygap=$ygap minDist=$minDist thresh=$(length(keys(items)))")
                     closesty = itemid
                 else# else we ban it for next iteration to simplify computation on assignment! 
-                    DEBUG_MOVE_TRACE[] && println("    [directserve X-path BAN] esc=$escortid item=$itemid ygap=$ygap minDist=$minDist thresh=$(length(keys(items))+1) path_to_io=$(path_to_io_exists_if(matrix, itemscoords, IO))")
+                    DEBUG_MOVE_TRACE[] && println("    [directserve X-path BAN] esc=$escortid item=$itemid ygap=$ygap minDist=$minDist thresh=$(length(keys(items))) path_to_io=$(path_to_io_exists_if(matrix, itemscoords, IO))")
                     if !haskey(thisescort.banset, iteration+1)
                         thisescort.banset[iteration+1] = [itemid]
                     else
@@ -6206,7 +6283,7 @@ function directserve_flow!(iteration, matrix, items, escorts, escortid, urgcusts
                 itemscoords = generatefuturecoords(items, escorts,2, escortid, itemid, matrix, IO)
                 samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords) # as moving this item might move another item closer to depot
                 minDist = minimum([abs(IO[1] - coord[1]) + abs(IO[2] - coord[2]) for coord in samexcoords])
-                if  minDist > length(keys(items))+1 ||
+                if  minDist > length(keys(items)) ||
                     path_to_io_exists_if(matrix, itemscoords, IO) # check with A* if this movement would cause some stupid block
                     distx = xgap
                     closestx = itemid
@@ -6307,7 +6384,7 @@ function directserve_flow_multi_io!(iteration, matrix, items, escorts, escortid,
                     itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, item_io_x)
                     sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords)
                     minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in sameycoords])
-                    if minDist > length(keys(items)) + 1 ||
+                    if minDist > length(keys(items)) ||
                         path_to_io_exists_if(matrix, itemscoords, item_io_x)
                         disty = ygap
                         closesty = itemid
@@ -6348,7 +6425,7 @@ function directserve_flow_multi_io!(iteration, matrix, items, escorts, escortid,
                     itemscoords = generatefuturecoords(items, escorts, 2, escortid, itemid, matrix, item_io_y)
                     samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords)
                     minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samexcoords])
-                    if minDist > length(keys(items)) + 1 ||
+                    if minDist > length(keys(items)) ||
                         path_to_io_exists_if(matrix, itemscoords, item_io_y)
                         distx = xgap
                         closestx = itemid
@@ -6469,7 +6546,7 @@ function directserve_flow_multi_io_r!(iteration, matrix, items, escorts, escorti
                     itemscoords = generatefuturecoords(items, escorts, 1, escortid, itemid, matrix, item_io_x)
                     sameycoords = filter(x -> x[2] == itemy && x[1] >= min(itemx, esc_x) && x[1] <= max(itemx, esc_x), itemscoords)
                     minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in sameycoords])
-                    if minDist > length(keys(items)) + 1 ||
+                    if minDist > length(keys(items)) ||
                         path_to_io_exists_if(matrix, itemscoords, item_io_x)
                         disty = ygap
                         closesty = itemid
@@ -6510,7 +6587,7 @@ function directserve_flow_multi_io_r!(iteration, matrix, items, escorts, escorti
                     itemscoords = generatefuturecoords(items, escorts, 2, escortid, itemid, matrix, item_io_y)
                     samexcoords = filter(x -> x[1] == itemx && x[2] >= min(itemy, esc_y) && x[2] <= max(itemy, esc_y), itemscoords)
                     minDist = minimum([abs(iox - coord[1]) + abs(ioy - coord[2]) for coord in samexcoords])
-                    if minDist > length(keys(items)) + 1 ||
+                    if minDist > length(keys(items)) ||
                         path_to_io_exists_if(matrix, itemscoords, item_io_y)
                         distx = xgap
                         closestx = itemid
@@ -8569,6 +8646,20 @@ function allowedOrder(esc_x, iox, itemx) # escort can serve
         (esc_x < itemx && iox < itemx) ||
         (esc_x > itemx && iox > itemx)
     )
+end
+# A row move of an escort to itemx shifts every cell in between one step back
+# towards the escort's start. If the escort is on the other side of the IO,
+# any other target load between the IO and the escort would be pushed away
+# from the IO (and the next assignment would push it back: an endless loop).
+function hurts_load_across_io(items, itemkey, esc_x, esc_y, io_x, itemx)
+    lo, hi = if itemx < io_x < esc_x
+        io_x, esc_x
+    elseif esc_x < io_x < itemx
+        esc_x, io_x
+    else
+        return false
+    end
+    return any(k != itemkey && it.coords[2] == esc_y && lo < it.coords[1] < hi for (k, it) in items)
 end
 
 function print_matrix(matrix)
